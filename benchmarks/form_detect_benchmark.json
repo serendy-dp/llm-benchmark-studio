@@ -1,0 +1,180 @@
+{
+  "benchmark_meta": {
+    "title": "Webフォーム検出・ナビゲーション判断ベンチマーク",
+    "version": "1.0",
+    "created": "2026-03-16",
+    "description": "Webスクレイピングエージェントがお問い合わせフォームを発見するために必要な能力を評価する。リンク一覧からの目的ページ選択（ナビゲーション判断）、訪問履歴を踏まえた探索継続・打ち切り判断、HTMLフォームの用途識別の3領域を対象とする。",
+    "total_domains": 3,
+    "total_questions": 10,
+    "scoring_scale": {
+      "max": 5,
+      "levels": [5, 3, 1, 0]
+    }
+  },
+  "domains": [
+    {
+      "id": "link_navigation",
+      "label": "リンクナビゲーション",
+      "color": "#378ADD",
+      "description": "ページから収集したリンク一覧を読み、お問い合わせフォームへ続く最適なURLを1つ選択する能力。テキストとURLの意味的解釈・ノイズ排除を評価する。",
+      "questions": [
+        {
+          "id": "link_navigation_01",
+          "title": "標準的なリンク選択",
+          "difficulty": "★★",
+          "tags": ["リンク選択", "キーワード認識", "出力制御"],
+          "prompt": "以下はあるWebサイトのトップページから収集したリンク一覧です。\nお問い合わせフォームページに最も近いと思われるURLを1つだけ選んでください。\n\nサイト: https://example-corp.co.jp\n収集したリンク:\n- /company（テキスト: 会社概要）\n- /service（テキスト: サービス）\n- /news（テキスト: ニュース）\n- /recruit（テキスト: 採用情報）\n- /toiawase（テキスト: お問い合わせ）\n- /sitemap（テキスト: サイトマップ）\n\nURLのみ1行で返してください。",
+          "expected_output": "/toiawase",
+          "scoring": [
+            { "score": 5, "label": "/toiawase または https://example-corp.co.jp/toiawase のみを返す・余計な説明や記号なし" },
+            { "score": 3, "label": "/toiawase（またはフルURL）を返すが説明文・引用符・改行等を付加している" },
+            { "score": 1, "label": "/toiawase 以外の関連URLを選択する（例: /sitemap, /company）" },
+            { "score": 0, "label": "URLを返さない、または無関係な回答" }
+          ]
+        },
+        {
+          "id": "link_navigation_02",
+          "title": "変則リンクテキストの意味理解",
+          "difficulty": "★★★",
+          "tags": ["意味理解", "変則テキスト", "リンク選択"],
+          "prompt": "以下はあるWebサイトのトップページから収集したリンク一覧です。\nお問い合わせフォームページに最も近いと思われるURLを1つだけ選んでください。\n\nサイト: https://consulting-firm.co.jp\n収集したリンク:\n- /about（テキスト: 私たちについて）\n- /works（テキスト: 実績）\n- /thinking（テキスト: 考え方）\n- /connect（テキスト: つながる）\n- /members（テキスト: メンバー）\n- /journal（テキスト: ブログ）\n\nURLのみ1行で返してください。",
+          "expected_output": "/connect",
+          "scoring": [
+            { "score": 5, "label": "/connect または https://consulting-firm.co.jp/connect のみを返す・「つながる」の意味的解釈が正しい" },
+            { "score": 3, "label": "/connect（またはフルURL）を返すが説明を付加する、または迷いを示す" },
+            { "score": 1, "label": "/about や /thinking など問い合わせと無関係のURLを選ぶ" },
+            { "score": 0, "label": "URLを返さない、または全候補を列挙する" }
+          ]
+        },
+        {
+          "id": "link_navigation_03",
+          "title": "フッターリンクからの選択",
+          "difficulty": "★★",
+          "tags": ["リンク選択", "文脈理解", "フッター"],
+          "prompt": "以下はあるWebサイトのフッターから収集したリンク一覧です。\nお問い合わせフォームページに最も近いと思われるURLを1つだけ選んでください。\n\nサイト: https://manufacturer.jp\n収集したリンク（すべてフッター）:\n- /privacy（テキスト: プライバシーポリシー）\n- /terms（テキスト: 利用規約）\n- /sitemap（テキスト: サイトマップ）\n- /ir（テキスト: 投資家情報）\n- /csr（テキスト: CSR活動）\n- /inquiry（テキスト: お取引・ご相談）\n\nURLのみ1行で返してください。",
+          "expected_output": "/inquiry",
+          "scoring": [
+            { "score": 5, "label": "/inquiry または https://manufacturer.jp/inquiry のみを返す" },
+            { "score": 3, "label": "/inquiry（またはフルURL）を返すが不要な出力を付加する" },
+            { "score": 1, "label": "/privacy や /terms など法的ページを誤選択する" },
+            { "score": 0, "label": "URLを返さない、または無関係な回答" }
+          ]
+        },
+        {
+          "id": "link_navigation_04",
+          "title": "複数候補からの絞り込み",
+          "difficulty": "★★★",
+          "tags": ["候補絞り込み", "優先順位判断", "リンク選択"],
+          "prompt": "以下はあるWebサイトから収集したリンク一覧です。\nお問い合わせフォームページに最も近いと思われるURLを1つだけ選んでください。\n\nサイト: https://software-vendor.co.jp\n収集したリンク:\n- /support（テキスト: サポート）\n- /contact（テキスト: Contact）\n- /faq（テキスト: よくある質問）\n- /docs（テキスト: ドキュメント）\n- /contact/sales（テキスト: 営業へのお問い合わせ）\n- /contact/support（テキスト: 技術サポート）\n\nURLのみ1行で返してください。",
+          "expected_output": "/contact または /contact/sales または /contact/support",
+          "scoring": [
+            { "score": 5, "label": "/contact・/contact/sales・/contact/support のいずれか（パスまたはフルURL）を1つのみ返す" },
+            { "score": 3, "label": "/contact 系を選ぶが複数URLを列挙する、または説明を付加する" },
+            { "score": 1, "label": "/support や /faq を選択する（間接的関連に留まる）" },
+            { "score": 0, "label": "URLを返さない、または /docs など無関係なURLを選ぶ" }
+          ]
+        },
+        {
+          "id": "link_navigation_05",
+          "title": "ノイズURLを含む罠の回避",
+          "difficulty": "★★★★",
+          "tags": ["ノイズ排除", "URL意味解釈", "誤認回避"],
+          "prompt": "以下はあるWebサイトから収集したリンク一覧です。\nお問い合わせフォームページに最も近いと思われるURLを1つだけ選んでください。\n\nサイト: https://media-company.co.jp\n収集したリンク:\n- /contact-us-story（テキスト: 私たちの歩み）\n- /newsletter（テキスト: メルマガ登録）\n- /aboutus（テキスト: About Us）\n- /reach-out（テキスト: Reach Out）\n- /advertise（テキスト: 広告掲載）\n- /press（テキスト: プレスリリース）\n\nURLのみ1行で返してください。",
+          "expected_output": "/reach-out",
+          "scoring": [
+            { "score": 5, "label": "/reach-out または https://media-company.co.jp/reach-out のみを返す・/contact-us-story の罠に引っかからない" },
+            { "score": 3, "label": "/reach-out（またはフルURL）を選ぶが迷いを示す、または説明で誤認を示唆する" },
+            { "score": 1, "label": "/contact-us-story を選ぶ（URLの contact 部分に引っかかる）" },
+            { "score": 0, "label": "URLを返さない、または /newsletter・/advertise など明らかに無関係なURLを選ぶ" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "exploration_judgment",
+      "label": "探索継続判断",
+      "color": "#E8A838",
+      "description": "訪問済みページの情報を踏まえて次の探索先を選ぶ判断力、および目的達成が困難と判断した際に適切に探索を打ち切るメタ認知能力を評価する。",
+      "questions": [
+        {
+          "id": "exploration_judgment_01",
+          "title": "訪問履歴を踏まえた次ページ選択",
+          "difficulty": "★★★",
+          "tags": ["探索継続", "訪問履歴活用", "優先度判断"],
+          "prompt": "お問い合わせフォームを探しています。\n以下の状況を踏まえて次に訪問すべきURLを1つ選んでください。\n\nサイト: https://enterprise.co.jp\n訪問済みページ:\n- /（トップページ、フォームなし）\n- /company（会社概要、フォームなし）\n- /service（サービス一覧、フォームなし）\n\n未訪問リンク（訪問済みページから収集）:\n- /service/detail（テキスト: サービス詳細）\n- /company/history（テキスト: 沿革）\n- /contact（テキスト: お問い合わせ）\n- /news（テキスト: ニュース）\n- /partner（テキスト: パートナー）\n\nURLのみ1行で返してください。",
+          "expected_output": "/contact",
+          "scoring": [
+            { "score": 5, "label": "/contact または https://enterprise.co.jp/contact のみを返す・訪問済み情報を活用した合理的選択" },
+            { "score": 3, "label": "/contact（またはフルURL）を返すが説明を加える、または他候補も挙げる" },
+            { "score": 1, "label": "/service/detail や /company/history など探索優先度の低いURLを選ぶ" },
+            { "score": 0, "label": "URLを返さない、または訪問済みURLを再選択する" }
+          ]
+        },
+        {
+          "id": "exploration_judgment_02",
+          "title": "探索打ち切り判断とメタ認知",
+          "difficulty": "★★★★★",
+          "tags": ["打ち切り判断", "メタ認知", "探索戦略"],
+          "prompt": "お問い合わせフォームを探しています。\n以下の状況を踏まえて次のアクションを判断してください。\n\nサイト: https://closed-corp.co.jp\n訪問済みページ（30ページ）:\n- / /about /company /service /service/a /service/b\n  /service/c /news /news/1〜20 /recruit /recruit/detail\n  /ir /ir/report /csr /csr/activity /sitemap /privacy /terms\n\n未訪問リンク:\n- /news/21〜50（テキスト: ニュース記事）\n\n状況: 30ページ訪問済み。フォームは未発見。残りリンクはすべてニュース記事ページ。\n\n次のアクションを以下から選び、理由を1行で添えてください。\nA: 引き続きニュース記事ページを探索する\nB: このサイトにはお問い合わせフォームがない可能性が高いため探索を終了する\nC: 別の手法（JSレンダリング等）に切り替える\n\nアルファベット1文字と理由を1行で返してください。",
+          "expected_output": "B または C（理由付き）",
+          "scoring": [
+            { "score": 5, "label": "B または C を選択し・ニュース記事にフォームが存在しない根拠など妥当な理由を1行で明示" },
+            { "score": 3, "label": "B または C を選ぶが理由が曖昧・根拠に乏しい、または理由を省略している" },
+            { "score": 1, "label": "B または C を選ぶが理由が矛盾している、またはアルファベット以外の形式で回答" },
+            { "score": 0, "label": "A を選択してニュース記事の探索継続を提案する" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form_analysis",
+      "label": "フォーム解析",
+      "color": "#1D9E75",
+      "description": "HTMLフォームの構造・フィールド名・ラベル・action属性を解析して用途を正確に分類する能力、複数フォームが混在するページでの優先判断、および曖昧なフォームの可能性スコアリングを評価する。",
+      "questions": [
+        {
+          "id": "form_analysis_01",
+          "title": "HTMLフォームの用途分類",
+          "difficulty": "★★",
+          "tags": ["フォーム解析", "HTML理解", "用途分類"],
+          "prompt": "以下のHTMLはあるWebページから抽出したフォームです。\nこのフォームの用途を以下から1つ選んでください。\n\nA: 一般的なお問い合わせフォーム\nB: 採用応募フォーム\nC: 資料請求フォーム\nD: 会員登録フォーム\n\nHTMLフォーム:\n<form action=\"/recruit/apply\" method=\"POST\">\n  <input type=\"text\"  name=\"name\"     placeholder=\"氏名\">\n  <input type=\"email\" name=\"email\"    placeholder=\"メールアドレス\">\n  <input type=\"text\"  name=\"school\"   placeholder=\"学校名\">\n  <select name=\"position\">\n    <option>エンジニア職</option>\n    <option>営業職</option>\n  </select>\n  <input type=\"file\"  name=\"resume\"   accept=\".pdf\">\n  <textarea           name=\"pr\"       placeholder=\"自己PR\"></textarea>\n  <button type=\"submit\">応募する</button>\n</form>\n\nアルファベット1文字のみ返してください。",
+          "expected_output": "B",
+          "scoring": [
+            { "score": 5, "label": "B のみを返す・school/resume/pr フィールドと /recruit/apply を正しく採用フォームと判定" },
+            { "score": 3, "label": "B を返すが説明を付加する" },
+            { "score": 1, "label": "A を選択する（お問い合わせと誤認、フォームの一部を正しく認識している）" },
+            { "score": 0, "label": "C または D を選択する、またはアルファベット以外の形式で回答" }
+          ]
+        },
+        {
+          "id": "form_analysis_02",
+          "title": "複数フォームからお問い合わせを特定",
+          "difficulty": "★★★",
+          "tags": ["複数フォーム", "優先判断", "HTML解析"],
+          "prompt": "以下のHTMLには複数のフォームが含まれています。\n一般的なお問い合わせフォームはどれか、番号を1つ返してください。\n\nフォーム1:\n<form action=\"/newsletter/subscribe\">\n  <input type=\"email\" name=\"email\" placeholder=\"メールアドレス\">\n  <button>メルマガ登録</button>\n</form>\n\nフォーム2:\n<form action=\"/search\">\n  <input type=\"text\" name=\"q\" placeholder=\"サイト内検索\">\n  <button>検索</button>\n</form>\n\nフォーム3:\n<form action=\"/contact/send\" method=\"POST\">\n  <input type=\"text\"  name=\"company\"  placeholder=\"会社名\">\n  <input type=\"text\"  name=\"name\"     placeholder=\"お名前\">\n  <input type=\"email\" name=\"email\"    placeholder=\"メールアドレス\">\n  <textarea           name=\"message\"  placeholder=\"お問い合わせ内容\"></textarea>\n  <button type=\"submit\">送信する</button>\n</form>\n\n数字1文字のみ返してください。",
+          "expected_output": "3",
+          "scoring": [
+            { "score": 5, "label": "3 のみを返す・/contact/send と message フィールドを正しく判定" },
+            { "score": 3, "label": "3 を返すが説明・番号以外の出力を付加する" },
+            { "score": 1, "label": "1 を選択する（メルマガ登録をお問い合わせと誤認）" },
+            { "score": 0, "label": "2 を選択する、または数字以外の形式で回答" }
+          ]
+        },
+        {
+          "id": "form_analysis_03",
+          "title": "曖昧なリード獲得フォームのスコアリング",
+          "difficulty": "★★★★",
+          "tags": ["曖昧性判断", "スコアリング", "フォーム解析"],
+          "prompt": "以下のHTMLフォームが「一般的なお問い合わせフォーム」である可能性を\n0〜100のスコアで返してください。\n\n<form action=\"/api/v1/lead\" method=\"POST\">\n  <input type=\"text\"  name=\"full_name\"    placeholder=\"Your Name\">\n  <input type=\"email\" name=\"work_email\"   placeholder=\"Work Email\">\n  <input type=\"text\"  name=\"company\"      placeholder=\"Company\">\n  <input type=\"text\"  name=\"job_title\"    placeholder=\"Job Title\">\n  <select name=\"employees\">\n    <option>1-10</option>\n    <option>11-50</option>\n    <option>51-200</option>\n    <option>201+</option>\n  </select>\n  <textarea name=\"use_case\" placeholder=\"Tell us about your use case\"></textarea>\n  <button type=\"submit\">Request a Demo</button>\n</form>\n\n数値のみ返してください。",
+          "expected_output": "30〜60の範囲（リード獲得・デモ申込フォームと判断）",
+          "scoring": [
+            { "score": 5, "label": "30〜60 の値を返す・/api/v1/lead・work_email・job_title・Request a Demo からリード獲得用と適切に低評価" },
+            { "score": 3, "label": "25〜70 の値を返す（概ね正しいが過大または過小評価）" },
+            { "score": 1, "label": "70〜85 の値を返す（一般問い合わせとほぼ同等と過大評価・リード獲得の特徴を見落とす）" },
+            { "score": 0, "label": "85 以上または 20 未満の値を返す、あるいは数値以外の形式で回答" }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Benchmark Studio</title>
+<style>
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --surface3: #2a2f45;
+  --border: #2e3347; --text: #e2e8f0; --muted: #8892a4; --accent: #378ADD;
+  --green: #1D9E75; --red: #D4537E; --yellow: #E8A838; --orange: #D85A30;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Header */
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 16px; height: 48px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+.logo { font-weight: 700; font-size: 15px; color: var(--accent); white-space: nowrap; }
+.tabs { display: flex; gap: 2px; }
+.tab-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px 14px; border-radius: 6px; font-size: 13px; transition: all .15s; }
+.tab-btn:hover { background: var(--surface2); color: var(--text); }
+.tab-btn.active { background: var(--surface2); color: var(--accent); font-weight: 600; }
+.header-spacer { flex: 1; }
+.lm-status { font-size: 12px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.status-dot.on { background: var(--green); }
+.status-dot.off { background: var(--red); }
+
+/* Layout */
+.layout { flex: 1; display: flex; overflow: hidden; }
+
+/* Sidebar */
+.sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); display: flex; flex-direction: column; }
+.sidebar-section { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.sidebar-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 0 12px 6px; }
+.file-item { padding: 7px 12px; cursor: pointer; border-left: 3px solid transparent; transition: all .1s; }
+.file-item:hover { background: var(--surface2); }
+.file-item.selected { border-left-color: var(--accent); background: var(--surface2); }
+.file-name { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.score-pill { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+
+/* Main content */
+.content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.tab-content { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.tab-content.active { display: flex; }
+
+/* Panel */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 8px; overflow: hidden; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13px; gap: 8px; }
+.panel-body { padding: 12px 14px; }
+
+/* Config */
+.run-layout { display: flex; flex: 1; overflow: hidden; gap: 0; }
+.run-params { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
+.run-params-header { padding: 8px 14px; font-weight: 700; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; background: var(--surface2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.run-params-body { padding: 12px 14px; }
+.run-tasks { width: 370px; flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); }
+.run-tasks-header { padding: 8px 14px; font-weight: 700; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; background: var(--surface2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.run-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.config-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.config-row label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.config-row input, .config-row select, .config-row textarea {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 5px; padding: 6px 8px; font-size: 12px; width: 100%;
+}
+.config-row textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+.config-row select option { background: var(--surface2); }
+.params-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.param-item { display: flex; flex-direction: column; gap: 4px; }
+.param-item label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.param-item input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 5px; padding: 5px 7px; font-size: 12px; width: 100%; }
+
+/* Buttons */
+button { cursor: pointer; font-size: 12px; border: none; border-radius: 5px; padding: 5px 12px; transition: all .15s; }
+.btn-primary { background: var(--accent); color: #fff; font-weight: 600; }
+.btn-primary:hover { opacity: .85; }
+.btn-stop { background: var(--red); color: #fff; font-weight: 600; }
+.btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--surface3); }
+.btn-sm { padding: 3px 8px; font-size: 11px; }
+.btn-icon { background: none; color: var(--muted); padding: 4px 6px; }
+.btn-icon:hover { color: var(--text); background: var(--surface3); }
+
+/* Question list */
+.questions-scroll { flex: 1; overflow-y: auto; }
+.domain-group { border-bottom: 1px solid var(--border); }
+.domain-label-row { display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; user-select: none; background: var(--surface2); position: sticky; top: 0; z-index: 1; }
+.domain-label-row:hover { background: var(--surface3); }
+.domain-chevron { font-size: 10px; color: var(--muted); transition: transform .15s; }
+.domain-chevron.collapsed { transform: rotate(-90deg); }
+.domain-name { font-weight: 600; font-size: 12px; flex: 1; }
+.domain-count { font-size: 11px; color: var(--muted); }
+.domain-check input { cursor: pointer; }
+.domain-questions { }
+.domain-questions.hidden { display: none; }
+.question-item { display: flex; align-items: flex-start; gap: 8px; padding: 7px 14px 7px 22px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.question-item:hover { background: var(--surface2); }
+.question-item input[type=checkbox] { margin-top: 2px; cursor: pointer; flex-shrink: 0; }
+.q-diff { color: var(--yellow); font-size: 11px; flex-shrink: 0; }
+.q-title-text { flex: 1; font-size: 12px; }
+.q-id-text { font-size: 10px; color: var(--muted); font-family: monospace; white-space: nowrap; }
+.run-actions { padding: 10px 14px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; background: var(--surface2); }
+.select-links { display: flex; gap: 4px; }
+.run-count { color: var(--muted); font-size: 11px; flex: 1; }
+
+/* Live output */
+.live-output { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.live-card { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; border-left: 3px solid var(--border); }
+.live-card.running { border-left-color: var(--accent); animation: pulse-border 1.5s ease-in-out infinite; }
+.live-card.success { border-left-color: var(--green); }
+.live-card.error { border-left-color: var(--red); }
+@keyframes pulse-border { 0%,100% { border-left-color: var(--accent); } 50% { border-left-color: #6ab0ff; } }
+.live-card-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--surface2); flex-wrap: wrap; cursor: pointer; user-select: none; }
+.live-card-head:hover { background: var(--surface3); }
+.live-chevron { flex-shrink: 0; display: inline-flex; transition: transform .15s; }
+.live-chevron.collapsed { transform: rotate(-90deg); }
+.live-card-body.collapsed { display: none; }
+.live-idx { font-size: 11px; color: var(--muted); font-family: monospace; white-space: nowrap; }
+.live-icon { font-size: 12px; flex-shrink: 0; }
+.live-domain-tag { font-size: 10px; padding: 1px 6px; background: var(--surface3); border-radius: 4px; color: var(--muted); white-space: nowrap; }
+.live-q-id { font-family: monospace; font-size: 11px; color: var(--muted); }
+.live-q-title { font-size: 12px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-diff { font-size: 11px; color: var(--yellow); white-space: nowrap; }
+.live-time { font-size: 11px; color: var(--muted); white-space: nowrap; margin-left: auto; }
+.live-response { padding: 8px 10px; font-size: 12px; font-family: "SF Mono", "Consolas", monospace; white-space: pre-wrap; word-break: break-word; line-height: 1.6; max-height: 240px; overflow-y: auto; color: var(--text); }
+.live-error { padding: 8px 10px; color: var(--red); font-size: 12px; }
+.live-done-banner { background: var(--surface); border: 1px solid var(--green); border-left: 3px solid var(--green); border-radius: 7px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.live-done-banner-top { display: flex; align-items: center; gap: 8px; color: var(--green); font-weight: 700; font-size: 13px; flex-wrap: wrap; }
+.live-done-banner-top code { font-size: 11px; color: var(--muted); font-weight: 400; word-break: break-all; }
+.live-info { padding: 8px 10px; color: var(--muted); font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; }
+
+/* Benchmark viewer */
+.bv-layout { display: flex; flex: 1; overflow: hidden; }
+.bv-sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+.bv-main { flex: 1; overflow-y: auto; padding: 16px; }
+.bv-bench-meta { margin-bottom: 20px; }
+.bv-bench-title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+.bv-bench-desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 10px; }
+.bv-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.bv-stat { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 12px; color: var(--muted); }
+.bv-stat b { color: var(--accent); }
+.bv-domain { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+.bv-domain-head { padding: 10px 14px; background: var(--surface2); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; border-left: 4px solid var(--accent); }
+.bv-domain-desc { font-size: 12px; color: var(--muted); padding: 8px 14px; border-bottom: 1px solid var(--border); line-height: 1.5; }
+.bv-domain-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.bv-question { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.bv-q-head { padding: 8px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.bv-q-id { font-size: 10px; color: var(--muted); font-family: monospace; flex-shrink: 0; }
+.bv-q-title { font-weight: 600; font-size: 13px; flex: 1; }
+.bv-q-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.bv-q-tag { font-size: 10px; padding: 1px 6px; border-radius: 10px; background: var(--surface3); color: var(--muted); }
+.bv-q-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.bv-q-body-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+.bv-prompt { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px; font-size: 12px; font-family: "SF Mono","Consolas",monospace; white-space: pre-wrap; line-height: 1.65; max-height: 280px; overflow-y: auto; color: var(--text); }
+.bv-scoring { display: flex; flex-direction: column; gap: 4px; }
+.bv-criterion { display: flex; align-items: flex-start; gap: 10px; font-size: 12px; padding: 6px 10px; border-radius: 5px; background: var(--bg); border-left: 3px solid; }
+.bv-criterion-score { font-weight: 800; font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; }
+.bv-criterion-label { color: var(--text); line-height: 1.5; }
+
+/* Results grid */
+.results-layout { display: flex; flex: 1; overflow: hidden; }
+.results-panel { width: 300px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.results-filter-bar { flex-shrink: 0; padding: 8px; border-bottom: 1px solid var(--border); background: var(--surface2); display: flex; flex-direction: column; gap: 5px; }
+.filter-input, .filter-select { width: 100%; background: var(--surface3); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-size: 12px; padding: 5px 8px; outline: none; }
+.filter-input:focus, .filter-select:focus { border-color: var(--accent); }
+.filter-input::placeholder { color: var(--muted); }
+.results-grid-wrap { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.result-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; transition: all .15s; }
+.result-card:hover { border-color: var(--accent); }
+.result-card.selected { border-color: var(--accent); }
+.result-card-model { font-weight: 700; font-size: 13px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-card-score { font-size: 24px; font-weight: 800; color: var(--accent); line-height: 1; }
+.result-card-score span { font-size: 12px; color: var(--muted); font-weight: 400; }
+.result-card-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.progress-bar { height: 3px; background: var(--surface3); border-radius: 2px; margin-top: 6px; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s; }
+
+/* Result detail */
+.result-detail-wrap { flex: 1; overflow-y: auto; padding: 8px; }
+.detail-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; gap: 8px; }
+.detail-header h2 { font-size: 16px; font-weight: 700; }
+.detail-header-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.detail-stats { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.dstat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; }
+.dstat-v { font-size: 26px; font-weight: 800; color: var(--accent); line-height: 1; }
+.dstat-v span { font-size: 12px; color: var(--muted); font-weight: 400; }
+.dstat-l { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.detail-params { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+.detail-params-head { padding: 8px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+.detail-params-body { padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.param-item { display: flex; align-items: baseline; gap: 5px; font-size: 12px; }
+.param-key { color: var(--muted); white-space: nowrap; }
+.param-val { color: var(--text); font-weight: 600; font-family: monospace; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.param-system { width: 100%; }
+.param-system .param-val { max-width: none; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+.detail-domain { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.detail-domain-head { padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 700; font-size: 13px; border-left: 4px solid var(--accent); cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; }
+.detail-domain-head:hover { background: var(--surface3); }
+.detail-domain-body.hidden { display: none; }
+.detail-q { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.detail-q:last-child { border-bottom: none; }
+.detail-q-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.detail-q-info { flex: 1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.q-id { font-family: monospace; font-size: 11px; color: var(--muted); }
+.q-title { font-weight: 600; font-size: 12px; }
+.q-diff { font-size: 11px; color: var(--yellow); }
+.q-time { font-size: 11px; color: var(--muted); }
+.score-btns { display: flex; gap: 4px; }
+.score-btn { min-width: 30px; padding: 3px 8px; font-weight: 700; font-size: 12px; background: var(--surface2); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; }
+.score-btn:hover { border-color: var(--text); color: var(--text); }
+.score-btn.active-5 { background: #1D9E7520; color: #1D9E75; border-color: #1D9E75; }
+.score-btn.active-3 { background: #378ADD20; color: #378ADD; border-color: #378ADD; }
+.score-btn.active-1 { background: #E8A83820; color: #E8A838; border-color: #E8A838; }
+.score-btn.active-0 { background: #D4537E20; color: #D4537E; border-color: #D4537E; }
+.q-error-msg { color: var(--red); font-size: 12px; margin: 4px 0; }
+details summary { font-size: 11px; color: var(--accent); cursor: pointer; padding: 3px 0; user-select: none; }
+details summary:hover { text-decoration: underline; }
+.q-response { font-size: 12px; font-family: "SF Mono", "Consolas", monospace; white-space: pre-wrap; word-break: break-word; line-height: 1.6; background: var(--surface2); border-radius: 5px; padding: 8px; margin-top: 6px; max-height: 300px; overflow-y: auto; }
+.q-criteria { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.criterion { padding: 5px 8px; border-radius: 4px; font-size: 12px; background: var(--bg); }
+
+/* Compare */
+.compare-layout { flex: 1; display: flex; overflow: hidden; }
+.compare-sidebar { width: 240px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+.compare-bench-section { flex-shrink: 0; border-bottom: 1px solid var(--border); overflow-y: auto; max-height: 45%; }
+.compare-result-section { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.cmp-sel-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 8px 12px 4px; display: flex; align-items: center; justify-content: space-between; }
+.cmp-sel-count { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.cmp-result-item { padding: 7px 12px; cursor: pointer; border-bottom: 1px solid var(--border); border-left: 3px solid transparent; transition: all .1s; }
+.cmp-result-item:hover { background: var(--surface2); }
+.cmp-result-item.sel-a { border-left-color: var(--accent); background: #378ADD10; }
+.cmp-result-item.sel-b { border-left-color: var(--green); background: #1D9E7510; }
+.cmp-result-badges { display: flex; gap: 4px; margin-bottom: 2px; }
+.cmp-badge { font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; }
+.cmp-badge-a { background: #378ADD30; color: var(--accent); }
+.cmp-badge-b { background: #1D9E7530; color: var(--green); }
+.cmp-result-model { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-result-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.compare-main { flex: 1; overflow-y: auto; padding: 10px; }
+.cmp-header { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.cmp-model-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; border-top-width: 3px; }
+.cmp-model-label { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+.cmp-model-name { font-weight: 700; font-size: 13px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-model-score { font-size: 26px; font-weight: 800; color: var(--accent); line-height: 1; }
+.cmp-model-score span { font-size: 12px; color: var(--muted); font-weight: 400; }
+.cmp-model-score.b { color: var(--green); }
+.cmp-model-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.cmp-domain-head { font-weight: 700; font-size: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; margin: 10px 0 6px; }
+.cmp-q-row { border: 1px solid var(--border); border-radius: 7px; margin-bottom: 8px; overflow: hidden; }
+.cmp-q-meta { padding: 6px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cmp-q-sides { display: grid; grid-template-columns: 1fr 1fr; }
+.cmp-q-side { padding: 8px 10px; font-size: 12px; border-right: 1px solid var(--border); }
+.cmp-q-side:last-child { border-right: none; }
+.cmp-q-response { font-family: "SF Mono", "Consolas", monospace; white-space: pre-wrap; word-break: break-word; line-height: 1.6; max-height: 220px; overflow-y: auto; margin-top: 4px; }
+.cmp-q-side.missing { color: var(--muted); font-style: italic; display: flex; align-items: center; }
+
+/* Result category */
+.sidebar-cat-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 6px 12px 3px; margin-top: 4px; }
+.results-cat-header { font-size: 11px; font-weight: 700; color: var(--muted); padding: 8px 10px; margin: 4px 0 4px; background: var(--surface2); border-radius: 5px; display: flex; align-items: center; justify-content: space-between; }
+.results-cat-header span { font-weight: 400; }
+
+/* Append banner */
+.append-banner { display:none; background: #378ADD18; border: 1px solid var(--accent); border-radius: 6px; padding: 7px 12px; margin: 8px 8px 0; font-size: 12px; color: var(--accent); align-items: center; gap: 8px; }
+.append-banner.show { display: flex; }
+.append-banner code { color: var(--muted); font-size: 11px; flex: 1; }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-danger:hover { opacity: .85; }
+
+/* Preset bar */
+.preset-bar { padding: 10px 14px 0; }
+.preset-bar-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+.preset-row { display: flex; gap: 5px; margin-bottom: 5px; align-items: center; }
+.preset-row select, .preset-row input[type=text] {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 5px; padding: 5px 8px; font-size: 12px; min-width: 0;
+}
+.preset-divider { border: none; border-top: 1px solid var(--border); margin: 10px 14px; }
+
+/* SVG icons */
+button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
+.btn-icon-label { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">LLM Benchmark Studio</div>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="run" onclick="showTab('run')">Run</button>
+    <button class="tab-btn" data-tab="results" onclick="showTab('results')">Results</button>
+    <button class="tab-btn" data-tab="compare" onclick="showTab('compare')">Compare</button>
+    <button class="tab-btn" data-tab="benchmark" onclick="showTab('benchmark')">Benchmark</button>
+  </nav>
+  <div class="header-spacer"></div>
+  <div class="lm-status">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Connecting...</span>
+    <button class="btn-icon btn-sm" onclick="loadModels()" title="Refresh models"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49,15a9,9,0,1,1-2.12-9.36L23,10"/></svg></button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-section" id="sidebar-benchmarks-section">
+      <div class="sidebar-title">Benchmarks</div>
+      <div id="sidebar-benchmarks"></div>
+    </div>
+    <div class="sidebar-section" id="sidebar-results-section" style="display:none;">
+      <div class="sidebar-title">Results</div>
+      <div id="sidebar-results"></div>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="content">
+
+    <!-- Run Tab -->
+    <div id="tab-run" class="tab-content active">
+      <div class="run-layout">
+        <!-- Panel 1: Benchmark tasks -->
+        <div class="run-tasks">
+          <div class="run-tasks-header">Benchmark Tasks</div>
+
+          <div id="append-banner" class="append-banner" style="margin:6px 8px 0;border-radius:5px;">
+            <span>追記先:</span><code id="append-filename"></code>
+            <button class="btn-ghost btn-sm" onclick="clearAppend()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> キャンセル</button>
+          </div>
+
+          <div class="run-actions">
+            <div class="select-links">
+              <button class="btn-ghost btn-sm" onclick="selectAll(true)">All</button>
+              <button class="btn-ghost btn-sm" onclick="selectAll(false)">None</button>
+            </div>
+            <span class="run-count" id="run-count">0 questions selected</span>
+            <button id="run-btn" class="btn-primary" onclick="toggleRun()"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Run</button>
+          </div>
+
+          <div class="questions-scroll" id="questions-list"></div>
+        </div>
+
+        <!-- Panel 2: Model parameters -->
+        <div class="run-params">
+          <div class="run-params-header">Model Parameters</div>
+
+          <!-- Preset -->
+          <div class="preset-bar">
+            <div class="preset-bar-title">Preset</div>
+            <div class="preset-row">
+              <select id="preset-select"><option value="">-- Select preset --</option></select>
+              <button class="btn-ghost btn-sm" onclick="applyPreset()" title="Load">Load</button>
+              <button class="btn-ghost btn-sm" onclick="deletePreset()" title="Delete"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/></svg></button>
+            </div>
+            <div class="preset-row">
+              <input type="text" id="preset-name" placeholder="Preset name...">
+              <button class="btn-ghost btn-sm" onclick="savePreset()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg> Save</button>
+            </div>
+          </div>
+
+          <hr class="preset-divider">
+
+          <div class="run-params-body">
+            <div class="config-row">
+              <label>Model</label>
+              <select id="run-model"><option value="">-- Select model --</option></select>
+            </div>
+            <div class="config-row">
+              <label>System Prompt</label>
+              <textarea id="run-system-prompt" rows="4">あなたは優秀なAIエージェントです。指示に従い、構造的・論理的に回答してください。</textarea>
+            </div>
+            <div class="params-row">
+              <div class="param-item"><label>Temperature</label><input type="number" id="run-temp" value="0.7" step="0.1" min="0" max="2"></div>
+              <div class="param-item"><label>Max Tokens</label><input type="number" id="run-maxtokens" value="4096" step="256"></div>
+            </div>
+            <div class="params-row">
+              <div class="param-item"><label>Top P</label><input type="number" id="run-top-p" placeholder="default" step="0.05" min="0" max="1"></div>
+              <div class="param-item"><label>Top K</label><input type="number" id="run-top-k" placeholder="default" step="1" min="0"></div>
+            </div>
+            <div class="params-row">
+              <div class="param-item"><label>Freq Penalty</label><input type="number" id="run-freq-penalty" placeholder="0.0" step="0.1" min="-2" max="2"></div>
+              <div class="param-item"><label>Pres Penalty</label><input type="number" id="run-pres-penalty" placeholder="0.0" step="0.1" min="-2" max="2"></div>
+            </div>
+            <div class="params-row">
+              <div class="param-item"><label>Repeat Penalty</label><input type="number" id="run-repeat-penalty" placeholder="1.0" step="0.05" min="0.5" max="2"></div>
+              <div class="param-item"><label>Min P</label><input type="number" id="run-min-p" placeholder="0.0" step="0.01" min="0" max="1"></div>
+            </div>
+            <div class="params-row">
+              <div class="param-item"><label>Seed</label><input type="number" id="run-seed" placeholder="-1 (random)" step="1"></div>
+              <div class="param-item"><label>Interval (s)</label><input type="number" id="run-interval" value="3" step="1" min="0"></div>
+            </div>
+            <div class="config-row" style="margin-top:4px;">
+              <label>Stop Sequences</label>
+              <input type="text" id="run-stop" placeholder="token1, token2, ..." style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 8px;font-size:12px;width:100%;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 3: Live output -->
+        <div class="run-right">
+          <div style="padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <span style="font-weight:600;font-size:12px;">Live Output</span>
+            <button class="btn-ghost btn-sm" onclick="clearOutput()">Clear</button>
+          </div>
+          <div class="live-output" id="live-output">
+            <div class="live-info">Run a benchmark to see live results here.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Tab -->
+    <div id="tab-results" class="tab-content">
+      <div class="results-layout">
+        <div class="results-panel">
+          <div class="results-filter-bar" id="results-filter-bar"></div>
+          <div class="results-grid-wrap" id="results-grid"></div>
+        </div>
+        <div class="result-detail-wrap" id="result-detail">
+          <div class="live-info" style="margin:8px;">Select a result to view details.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Benchmark Tab -->
+    <div id="tab-benchmark" class="tab-content">
+      <div class="bv-layout">
+        <div class="bv-sidebar" id="bv-bench-list"></div>
+        <div class="bv-main" id="bv-main">
+          <div class="live-info">ベンチマークを選択してください。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compare Tab -->
+    <div id="tab-compare" class="tab-content">
+      <div class="compare-layout">
+        <!-- Left: benchmark selector + result list -->
+        <div class="compare-sidebar">
+          <div class="compare-bench-section">
+            <div class="cmp-sel-title">Benchmark</div>
+            <div id="cmp-bench-list"></div>
+          </div>
+          <div class="compare-result-section">
+            <div class="cmp-sel-title">
+              Results
+              <span class="cmp-sel-count" id="cmp-sel-count">0/2</span>
+            </div>
+            <div id="cmp-result-list">
+              <div style="padding:10px 12px;color:var(--muted);font-size:12px;">ベンチマークを選択してください</div>
+            </div>
+          </div>
+        </div>
+        <!-- Right: comparison view -->
+        <div class="compare-main" id="compare-main">
+          <div class="live-info">ベンチマークを選択し、比較する結果を2つ選んでください。</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────
+const S = {
+  benchmarks: [],
+  results: [],
+  models: [],
+  presets: [],
+  selectedBenchmark: null,
+  benchmarkData: null,
+  running: false,
+  runController: null,
+  cmpBenchmark: null,
+  cmpSelected: [],
+  cmpCache: {},
+  activeResult: null,
+  appendToFile: null,   // 追記/上書き先ファイル名
+  gridFilter: { model: '', benchmark: '', score: '' },
+  bvBenchmark: null,
+};
+
+const SCORE_COLORS = { 5: '#1D9E75', 3: '#378ADD', 1: '#E8A838', 0: '#D4537E' };
+
+// ── SVG Icons ─────────────────────────────────────────────────
+const IC = {
+  trash:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>`,
+  lock:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7,11V7a5,5,0,0,1,10,0v4"/></svg>`,
+  doc:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14,2H6a2,2,0,0,0-2,2v16a2,2,0,0,0,2,2h12a2,2,0,0,0,2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  refresh:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49,15a9,9,0,1,1-2.12-9.36L23,10"/></svg>`,
+  play:     `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`,
+  stop:     `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
+  dot:      `<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>`,
+  check:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"/></svg>`,
+  xmark:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  chevron:  `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,9 12,15 18,9"/></svg>`,
+  clock:    `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>`,
+  skipfwd:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20"/></svg>`,
+  report:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14,2H6a2,2,0,0,0-2,2v16a2,2,0,0,0,2,2h12a2,2,0,0,0,2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>`,
+  settings: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4,15a1.65,1.65,0,0,0,.33,1.82l.06.06a2,2,0,0,1-2.83,2.83l-.06-.06a1.65,1.65,0,0,0-1.82-.33,1.65,1.65,0,0,0-1,1.51V21a2,2,0,0,1-4,0v-.09A1.65,1.65,0,0,0,9,19.4a1.65,1.65,0,0,0-1.82.33l-.06.06a2,2,0,0,1-2.83-2.83l.06-.06A1.65,1.65,0,0,0,4.68,15a1.65,1.65,0,0,0-1.51-1H3a2,2,0,0,1,0-4h.09A1.65,1.65,0,0,0,4.6,9a1.65,1.65,0,0,0-.33-1.82l-.06-.06a2,2,0,0,1,2.83-2.83l.06.06A1.65,1.65,0,0,0,9,4.68a1.65,1.65,0,0,0,1-1.51V3a2,2,0,0,1,4,0v.09a1.65,1.65,0,0,0,1,1.51,1.65,1.65,0,0,0,1.82-.33l.06-.06a2,2,0,0,1,2.83,2.83l-.06.06A1.65,1.65,0,0,0,19.4,9a1.65,1.65,0,0,0,1.51,1H21a2,2,0,0,1,0,4h-.09A1.65,1.65,0,0,0,19.4,15z"/></svg>`,
+};
+
+// ── Init ─────────────────────────────────────────────────────
+async function init() {
+  await Promise.all([loadBenchmarks(), loadResults(), loadModels(), loadPresets()]);
+  setInterval(loadModels, 30000);
+}
+
+function showTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  const sidebar = document.querySelector('.sidebar');
+  sidebar.style.display = (tab === 'compare' || tab === 'benchmark') ? 'none' : '';
+  document.getElementById('sidebar-results-section').style.display = tab === 'run' ? 'none' : '';
+  document.getElementById('sidebar-benchmarks-section').style.display = tab === 'results' ? 'none' : '';
+  if (tab === 'results') renderResultsGrid();
+  if (tab === 'benchmark') renderBvSidebar();
+}
+
+// ── Presets ───────────────────────────────────────────────────
+async function loadPresets() {
+  try {
+    S.presets = await fetch('/api/presets').then(r => r.json());
+    const sel = document.getElementById('preset-select');
+    sel.innerHTML = '<option value="">-- Select preset --</option>' +
+      S.presets.map(p => `<option value="${esc(p.filename)}">${esc(p.name)}</option>`).join('');
+  } catch(e) { console.error('loadPresets', e); }
+}
+
+function applyPreset() {
+  const filename = document.getElementById('preset-select').value;
+  if (!filename) return;
+  const p = S.presets.find(x => x.filename === filename);
+  if (!p) return;
+  const _set = (id, val) => { if (val !== undefined && val !== null) document.getElementById(id).value = val; else document.getElementById(id).value = ''; };
+  if (p.model) document.getElementById('run-model').value = p.model;
+  if (p.system_prompt !== undefined) document.getElementById('run-system-prompt').value = p.system_prompt;
+  _set('run-temp',           p.temperature);
+  _set('run-maxtokens',      p.max_tokens);
+  _set('run-interval',       p.interval);
+  _set('run-top-p',          p.top_p);
+  _set('run-top-k',          p.top_k);
+  _set('run-freq-penalty',   p.frequency_penalty);
+  _set('run-pres-penalty',   p.presence_penalty);
+  _set('run-repeat-penalty', p.repeat_penalty);
+  _set('run-min-p',          p.min_p);
+  _set('run-seed',           p.seed);
+  document.getElementById('run-stop').value = p.stop || '';
+}
+
+async function savePreset() {
+  const name = document.getElementById('preset-name').value.trim();
+  if (!name) { alert('プリセット名を入力してください'); return; }
+  const _pFloat = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+  const _pInt   = id => { const v = document.getElementById(id).value; return v === '' ? null : parseInt(v); };
+  const body = {
+    name,
+    model:              document.getElementById('run-model').value,
+    system_prompt:      document.getElementById('run-system-prompt').value,
+    temperature:        parseFloat(document.getElementById('run-temp').value),
+    max_tokens:         parseInt(document.getElementById('run-maxtokens').value),
+    interval:           parseFloat(document.getElementById('run-interval').value),
+    top_p:              _pFloat('run-top-p'),
+    top_k:              _pInt('run-top-k'),
+    frequency_penalty:  _pFloat('run-freq-penalty'),
+    presence_penalty:   _pFloat('run-pres-penalty'),
+    repeat_penalty:     _pFloat('run-repeat-penalty'),
+    min_p:              _pFloat('run-min-p'),
+    seed:               _pInt('run-seed'),
+    stop:               document.getElementById('run-stop').value.trim() || null,
+  };
+  await fetch('/api/preset', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  document.getElementById('preset-name').value = '';
+  await loadPresets();
+}
+
+async function deletePreset() {
+  const sel = document.getElementById('preset-select');
+  if (!sel.value) return;
+  if (!confirm(`「${sel.options[sel.selectedIndex].text}」を削除しますか？`)) return;
+  await fetch(`/api/preset/${encodeURIComponent(sel.value)}`, { method: 'DELETE' });
+  await loadPresets();
+}
+
+// ── Benchmarks ───────────────────────────────────────────────
+async function loadBenchmarks() {
+  try {
+    S.benchmarks = await fetch('/api/benchmarks').then(r => r.json());
+    renderSidebarBenchmarks();
+    renderCmpBenchmarks();
+    if (S.benchmarks.length > 0 && !S.selectedBenchmark) {
+      selectBenchmark(S.benchmarks[0].filename);
+    }
+  } catch(e) { console.error('loadBenchmarks', e); }
+}
+
+// ── Benchmark Viewer ──────────────────────────────────────────
+function renderBvSidebar() {
+  const el = document.getElementById('bv-bench-list');
+  if (!el) return;
+  el.innerHTML = S.benchmarks.map(b => `
+    <div class="file-item ${S.bvBenchmark === b.filename ? 'selected' : ''}"
+         onclick="selectBvBenchmark('${esc(b.filename)}')">
+      <div class="file-name">${esc(b.title || b.filename)}</div>
+      <div class="file-meta">${b.total_questions || '?'}問 · v${esc(b.version || '?')}</div>
+    </div>`).join('');
+}
+
+async function selectBvBenchmark(filename) {
+  S.bvBenchmark = filename;
+  renderBvSidebar();
+  const main = document.getElementById('bv-main');
+  main.innerHTML = '<div class="live-info">読み込み中...</div>';
+  try {
+    const data = await fetch(`/api/benchmark/${encodeURIComponent(filename)}`).then(r => r.json());
+    renderBvMain(data);
+  } catch(e) {
+    main.innerHTML = `<div class="live-info" style="color:var(--red);">読み込み失敗: ${esc(String(e))}</div>`;
+  }
+}
+
+function renderBvMain(data) {
+  const meta = data.benchmark_meta || {};
+  const statsHtml = [
+    `<div class="bv-stat">ドメイン <b>${meta.total_domains}</b></div>`,
+    `<div class="bv-stat">問題数 <b>${meta.total_questions}</b></div>`,
+    `<div class="bv-stat">スコア <b>${(meta.scoring_scale?.levels || []).join(' / ')}</b></div>`,
+    meta.created ? `<div class="bv-stat">作成日 <b>${esc(meta.created)}</b></div>` : '',
+    meta.version  ? `<div class="bv-stat">v<b>${esc(meta.version)}</b></div>` : '',
+  ].filter(Boolean).join('');
+
+  const domainsHtml = (data.domains || []).map(domain => {
+    const domColor = domain.color || 'var(--accent)';
+    const questionsHtml = (domain.questions || []).map(q => {
+      const tagsHtml = (q.tags || []).map(t => `<span class="bv-q-tag">${esc(t)}</span>`).join('');
+      const criteriaHtml = (q.scoring || []).map(c => {
+        const col = SCORE_COLORS[c.score] || '#555';
+        return `<div class="bv-criterion" style="border-left-color:${col}">
+          <span class="bv-criterion-score" style="color:${col}">${c.score}</span>
+          <span class="bv-criterion-label">${esc(c.label)}</span>
+        </div>`;
+      }).join('');
+      return `
+        <div class="bv-question">
+          <div class="bv-q-head" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+            <span class="bv-q-id">${esc(q.id)}</span>
+            <span class="bv-q-title">${esc(q.title)}</span>
+            <span style="color:var(--muted);font-size:12px;white-space:nowrap;">${esc(q.difficulty||'')}</span>
+            <div class="bv-q-tags">${tagsHtml}</div>
+          </div>
+          <div class="bv-q-body" style="display:none;">
+            <div>
+              <div class="bv-q-body-label">Prompt</div>
+              <pre class="bv-prompt">${esc(q.prompt)}</pre>
+            </div>
+            ${q.expected_output ? `<div><div class="bv-q-body-label">Expected</div><div style="font-size:12px;color:var(--green);font-family:monospace;">${esc(q.expected_output)}</div></div>` : ''}
+            <div>
+              <div class="bv-q-body-label">Scoring Criteria</div>
+              <div class="bv-scoring">${criteriaHtml}</div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+    return `
+      <div class="bv-domain">
+        <div class="bv-domain-head" style="border-left-color:${domColor}"
+             onclick="const b=this.nextElementSibling?.nextElementSibling||this.nextElementSibling;if(b)b.style.display=b.style.display==='none'?'':'none'">
+          <span style="color:${domColor}">${IC.chevron}</span>
+          <span style="flex:1">${esc(domain.label)}</span>
+          <span style="font-size:12px;font-weight:400;color:var(--muted)">${domain.questions.length}問</span>
+        </div>
+        ${domain.description ? `<div class="bv-domain-desc">${esc(domain.description)}</div>` : ''}
+        <div class="bv-domain-body">${questionsHtml}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('bv-main').innerHTML = `
+    <div class="bv-bench-meta">
+      <div class="bv-bench-title">${esc(meta.title || '')}</div>
+      ${meta.description ? `<div class="bv-bench-desc">${esc(meta.description)}</div>` : ''}
+      <div class="bv-stats">${statsHtml}</div>
+    </div>
+    ${domainsHtml}`;
+}
+
+function renderSidebarBenchmarks() {
+  const el = document.getElementById('sidebar-benchmarks');
+  el.innerHTML = S.benchmarks.map(b => `
+    <div class="file-item ${S.selectedBenchmark === b.filename ? 'selected' : ''}" onclick="selectBenchmark('${esc(b.filename)}')"${b.description ? ` title="${esc(b.description)}"` : ''}>
+      <div class="file-name">${esc(b.filename)}</div>
+      <div class="file-meta">${b.total_questions}問 · ${b.total_domains}ドメイン</div>
+    </div>
+  `).join('');
+}
+
+async function selectBenchmark(filename) {
+  S.selectedBenchmark = filename;
+  renderSidebarBenchmarks();
+  try {
+    S.benchmarkData = await fetch(`/api/benchmark/${encodeURIComponent(filename)}`).then(r => r.json());
+    renderQuestions(S.benchmarkData);
+  } catch(e) { console.error('selectBenchmark', e); }
+}
+
+function renderQuestions(benchmark) {
+  const el = document.getElementById('questions-list');
+  el.innerHTML = benchmark.domains.map(domain => `
+    <div class="domain-group">
+      <div class="domain-label-row" onclick="toggleDomain(this)">
+        <span class="domain-chevron">${IC.chevron}</span>
+        <span class="domain-name">${esc(domain.label)}</span>
+        <span class="domain-count">${domain.questions.length}</span>
+        <label class="domain-check" onclick="event.stopPropagation()">
+          <input type="checkbox" checked onchange="toggleDomainCheck(this,'${domain.id}')">
+        </label>
+      </div>
+      <div class="domain-questions" id="dq-${domain.id}">
+        ${domain.questions.map(q => `
+          <label class="question-item">
+            <input type="checkbox" class="q-check" value="${q.id}" checked onchange="updateRunCount()">
+            <span class="q-diff">${q.difficulty}</span>
+            <span class="q-title-text">${esc(q.title)}<br><span class="q-id-text">${q.id}</span></span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+  updateRunCount();
+}
+
+function toggleDomain(header) {
+  const chevron = header.querySelector('.domain-chevron');
+  const id = header.nextElementSibling.id.replace('dq-', '');
+  const qs = document.getElementById(`dq-${id}`);
+  chevron.classList.toggle('collapsed');
+  qs.classList.toggle('hidden');
+}
+
+function toggleDomainCheck(checkbox, domainId) {
+  document.querySelectorAll(`#dq-${domainId} .q-check`).forEach(cb => {
+    cb.checked = checkbox.checked;
+  });
+  updateRunCount();
+}
+
+function selectAll(checked) {
+  document.querySelectorAll('.q-check').forEach(cb => cb.checked = checked);
+  document.querySelectorAll('.domain-check input').forEach(cb => cb.checked = checked);
+  updateRunCount();
+}
+
+function updateRunCount() {
+  const count = document.querySelectorAll('.q-check:checked').length;
+  document.getElementById('run-count').textContent = `${count} questions selected`;
+  document.getElementById('run-btn').innerHTML = S.running ? `${IC.stop} Stop` : `${IC.play} Run (${count})`;
+}
+
+// ── Models ───────────────────────────────────────────────────
+async function loadModels() {
+  try {
+    const data = await fetch('/api/models').then(r => r.json());
+    S.models = data.models || [];
+    const dot = document.getElementById('status-dot');
+    const txt = document.getElementById('status-text');
+    if (data.connected) {
+      dot.className = 'status-dot on';
+      const loaded = S.models.filter(m => m.loaded);
+      txt.textContent = `Connected · ${loaded.length} loaded`;
+    } else {
+      dot.className = 'status-dot off';
+      txt.textContent = 'Disconnected';
+    }
+    const opts = renderModelOptions(S.models);
+    ['run-model'].forEach(id => {
+      const prev = document.getElementById(id).value;
+      document.getElementById(id).innerHTML = opts;
+      if (prev) document.getElementById(id).value = prev;
+    });
+  } catch(e) {
+    document.getElementById('status-dot').className = 'status-dot off';
+    document.getElementById('status-text').textContent = 'Disconnected';
+  }
+}
+
+function renderModelOptions(models) {
+  const loaded = models.filter(m => m.loaded);
+  const unloaded = models.filter(m => !m.loaded);
+  let html = '<option value="">-- Select model --</option>';
+  if (loaded.length) {
+    html += '<optgroup label="Loaded">' +
+      loaded.map(m => `<option value="${esc(m.key)}">${esc(m.name)}</option>`).join('') +
+      '</optgroup>';
+  }
+  if (unloaded.length) {
+    html += '<optgroup label="Available">' +
+      unloaded.map(m => `<option value="${esc(m.key)}">${esc(m.name)}</option>`).join('') +
+      '</optgroup>';
+  }
+  return html;
+}
+
+// ── Run ──────────────────────────────────────────────────────
+function toggleRun() {
+  if (S.running) stopRun();
+  else startRun();
+}
+
+async function startRun() {
+  const model = document.getElementById('run-model').value;
+  if (!model) { alert('モデルを選択してください'); return; }
+  if (!S.selectedBenchmark) { alert('ベンチマークを選択してください'); return; }
+
+  const qids = [...document.querySelectorAll('.q-check:checked')].map(cb => cb.value);
+  if (!qids.length) { alert('問題を選択してください'); return; }
+
+  const _optFloat = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+  const _optInt   = id => { const v = document.getElementById(id).value; return v === '' ? null : parseInt(v); };
+  const stopRaw = document.getElementById('run-stop').value.trim();
+  const config = {
+    benchmark_file: S.selectedBenchmark,
+    model,
+    system_prompt: document.getElementById('run-system-prompt').value,
+    temperature:        parseFloat(document.getElementById('run-temp').value),
+    max_tokens:         parseInt(document.getElementById('run-maxtokens').value),
+    interval:           parseFloat(document.getElementById('run-interval').value),
+    top_p:              _optFloat('run-top-p'),
+    top_k:              _optInt('run-top-k'),
+    frequency_penalty:  _optFloat('run-freq-penalty'),
+    presence_penalty:   _optFloat('run-pres-penalty'),
+    repeat_penalty:     _optFloat('run-repeat-penalty'),
+    min_p:              _optFloat('run-min-p'),
+    seed:               _optInt('run-seed'),
+    stop: stopRaw ? stopRaw.split(',').map(s => s.trim()).filter(Boolean) : null,
+    preset_name: (() => { const sel = document.getElementById('preset-select'); return sel.value ? (S.presets.find(p => p.filename === sel.value)?.name || null) : null; })(),
+    question_ids: qids,
+    append_to_file: S.appendToFile || null,
+  };
+
+  S.running = true;
+  S.runController = new AbortController();
+  document.getElementById('run-btn').innerHTML = `${IC.stop} Stop`;
+  document.getElementById('run-btn').className = 'btn-stop';
+
+  const output = document.getElementById('live-output');
+  output.innerHTML = '';
+
+  try {
+    const resp = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+      signal: S.runController.signal,
+    });
+    await readSSE(resp, handleRunEvent);
+  } catch(e) {
+    if (e.name !== 'AbortError') {
+      appendToOutput(`<div class="live-info" style="color:var(--red);">Error: ${esc(e.message)}</div>`);
+    }
+  }
+
+  S.running = false;
+  S.runController = null;
+  S.appendToFile = null;
+  clearAppend();
+  updateRunCount();
+  document.getElementById('run-btn').className = 'btn-primary';
+  loadResults();
+}
+
+function stopRun() {
+  if (S.runController) { S.runController.abort(); S.runController = null; }
+}
+
+async function readSSE(resp, handler) {
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const parts = buf.split('\n\n');
+    buf = parts.pop() ?? '';
+    for (const part of parts) {
+      const line = part.trim();
+      if (line.startsWith('data: ')) {
+        try { handler(JSON.parse(line.slice(6))); } catch(e) {}
+      }
+    }
+  }
+}
+
+function toggleLiveCard(head) {
+  const body = head.nextElementSibling;
+  if (!body) return;
+  body.classList.toggle('collapsed');
+  head.querySelector('.live-chevron')?.classList.toggle('collapsed');
+}
+
+function handleRunEvent(ev) {
+  const output = document.getElementById('live-output');
+  if (ev.type === 'start') {
+    output.innerHTML = `<div class="live-info">Running <b>${ev.total}</b> questions → <code>${esc(ev.output_file)}</code></div>`;
+  } else if (ev.type === 'warmup') {
+    const el = document.getElementById('live-warmup');
+    if (!el) {
+      const d = document.createElement('div');
+      d.id = 'live-warmup';
+      d.className = 'live-info';
+      d.style.color = 'var(--yellow)';
+      d.textContent = 'モデルをロード中...';
+      output.prepend(d);
+    }
+  } else if (ev.type === 'question_start') {
+    document.getElementById('live-warmup')?.remove();
+    const card = document.createElement('div');
+    card.id = `lc-${ev.idx}`;
+    card.className = 'live-card running';
+    card.innerHTML = `
+      <div class="live-card-head" onclick="toggleLiveCard(this)">
+        <span class="live-chevron">${IC.chevron}</span>
+        <span class="live-icon" id="li-${ev.idx}">${IC.dot}</span>
+        <span class="live-idx">[${ev.idx}/${ev.total}]</span>
+        <span class="live-domain-tag">${esc(ev.domain)}</span>
+        <span class="live-q-id">${esc(ev.id)}</span>
+        <span class="live-q-title">${esc(ev.title)}</span>
+        <span class="live-diff">${esc(ev.difficulty)}</span>
+      </div>
+      <div class="live-card-body" id="lb-${ev.idx}">
+        <div class="live-response" id="lr-${ev.idx}"></div>
+      </div>
+    `;
+    output.prepend(card);
+    output.scrollTop = 0;
+  } else if (ev.type === 'token') {
+    const el = document.getElementById(`lr-${ev.idx}`);
+    if (el) {
+      el.textContent += ev.content;
+      el.scrollTop = el.scrollHeight;
+    }
+  } else if (ev.type === 'question_done') {
+    const card = document.getElementById(`lc-${ev.idx}`);
+    if (card) {
+      card.classList.remove('running');
+      card.classList.add(ev.error ? 'error' : 'success');
+      const icon = document.getElementById(`li-${ev.idx}`);
+      if (icon) icon.innerHTML = ev.error ? IC.xmark : IC.check;
+      const head = card.querySelector('.live-card-head');
+      if (head) {
+        const t = document.createElement('span');
+        t.className = 'live-time';
+        t.textContent = `${ev.elapsed}s`;
+        head.appendChild(t);
+      }
+      // 完了後は折り畳む
+      const body = document.getElementById(`lb-${ev.idx}`);
+      if (body) body.classList.add('collapsed');
+      const chevron = card.querySelector('.live-chevron');
+      if (chevron) chevron.classList.add('collapsed');
+    }
+  } else if (ev.type === 'done') {
+    const div = document.createElement('div');
+    div.className = 'live-done-banner';
+    div.innerHTML = `
+      <div class="live-done-banner-top">
+        ${IC.check} Complete
+        <code>${esc(ev.output_file)}</code>
+      </div>`;
+    output.prepend(div);
+    output.scrollTop = 0;
+  } else if (ev.type === 'error') {
+    const div = document.createElement('div');
+    div.innerHTML = `<div class="live-info" style="color:var(--red);">Error: ${esc(ev.message)}</div>`;
+    output.prepend(div.firstChild);
+  }
+}
+
+function appendToOutput(html) {
+  const output = document.getElementById('live-output');
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  output.prepend(div.firstChild);
+}
+
+function clearOutput() {
+  document.getElementById('live-output').innerHTML = '<div class="live-info">Run a benchmark to see live results here.</div>';
+}
+
+// ── Results ──────────────────────────────────────────────────
+async function loadResults() {
+  try {
+    S.results = await fetch('/api/results').then(r => r.json());
+    renderSidebarResults();
+    renderCmpResults();
+    if (document.getElementById('tab-results').classList.contains('active')) {
+      renderResultsGrid();
+    }
+  } catch(e) { console.error('loadResults', e); }
+}
+
+function resultCategory(r) {
+  if (!r.total || r.scored === 0) return 'unscored';
+  if (r.scored >= r.total) return 'scored';
+  return 'partial';
+}
+
+function renderSidebarResults() {
+  const el = document.getElementById('sidebar-results');
+  const groups = [
+    { key: 'scored',   label: '採点済み', items: S.results.filter(r => resultCategory(r) === 'scored') },
+    { key: 'partial',  label: '採点中',   items: S.results.filter(r => resultCategory(r) === 'partial') },
+    { key: 'unscored', label: '未採点',   items: S.results.filter(r => resultCategory(r) === 'unscored') },
+  ].filter(g => g.items.length > 0);
+
+  el.innerHTML = groups.map(g => {
+    const rows = g.items.slice(0, 8).map(r => {
+      const isUnscored = g.key === 'unscored';
+      const score = r.avg_score !== null ? r.avg_score : null;
+      const scoreHtml = score !== null
+        ? `<span class="score-pill" style="background:${scoreColor(score)}22;color:${scoreColor(score)}">${score}/5</span> `
+        : '';
+      return `
+        <div class="file-item ${S.activeResult === r.filename ? 'selected' : ''}"
+          onclick="openResult('${esc(r.filename)}')">
+          <div class="file-name">${esc(r.model || r.filename)}</div>
+          <div class="file-meta">${scoreHtml}${r.run_at?.slice(0, 10) || ''}</div>
+        </div>`;
+    }).join('');
+    return `<div class="sidebar-cat-label">${g.label} (${g.items.length})</div>${rows}`;
+  }).join('');
+}
+
+function scoreColor(avg) {
+  if (avg >= 4) return '#1D9E75';
+  if (avg >= 2.5) return '#378ADD';
+  if (avg >= 1) return '#E8A838';
+  return '#D4537E';
+}
+
+function setGridFilter(key, val) {
+  S.gridFilter[key] = val;
+  renderResultsGrid();
+}
+
+function renderResultsGrid() {
+  // ── Filter bar ──────────────────────────────────────────────
+  const fb = document.getElementById('results-filter-bar');
+  if (fb) {
+    const uniqueModels = [...new Set(S.results.map(r => r.model).filter(Boolean))].sort();
+    const uniqueBenchmarks = [...new Set(S.results.map(r => r.benchmark_title).filter(Boolean))].sort();
+    const f = S.gridFilter;
+    fb.innerHTML = `
+      <input class="filter-input" type="text" placeholder="Model で絞り込み…"
+        value="${esc(f.model)}" oninput="setGridFilter('model',this.value)">
+      <select class="filter-select" onchange="setGridFilter('benchmark',this.value)">
+        <option value="">Benchmark: 全て</option>
+        ${uniqueBenchmarks.map(b => `<option value="${esc(b)}"${f.benchmark===b?' selected':''}>${esc(b)}</option>`).join('')}
+      </select>
+      <select class="filter-select" onchange="setGridFilter('score',this.value)">
+        <option value="">Score: 全て</option>
+        <option value="4"${f.score==='4'?' selected':''}>≥ 4.0</option>
+        <option value="3"${f.score==='3'?' selected':''}>≥ 3.0</option>
+        <option value="2"${f.score==='2'?' selected':''}>≥ 2.0</option>
+        <option value="1"${f.score==='1'?' selected':''}>≥ 1.0</option>
+      </select>`;
+  }
+
+  // ── Apply filters ────────────────────────────────────────────
+  const { model: mf, benchmark: bf, score: sf } = S.gridFilter;
+  const filtered = S.results.filter(r => {
+    if (mf && !(r.model || '').toLowerCase().includes(mf.toLowerCase())) return false;
+    if (bf && r.benchmark_title !== bf) return false;
+    if (sf && (r.avg_score === null || r.avg_score < parseFloat(sf))) return false;
+    return true;
+  });
+
+  // ── Render cards ─────────────────────────────────────────────
+  const el = document.getElementById('results-grid');
+  const groups = [
+    { key: 'scored',   label: '採点済み', color: 'var(--green)',  items: filtered.filter(r => resultCategory(r) === 'scored') },
+    { key: 'partial',  label: '採点中',   color: 'var(--yellow)', items: filtered.filter(r => resultCategory(r) === 'partial') },
+    { key: 'unscored', label: '未採点',   color: 'var(--muted)',  items: filtered.filter(r => resultCategory(r) === 'unscored') },
+  ].filter(g => g.items.length > 0);
+
+  if (!groups.length) {
+    el.innerHTML = '<div class="live-info">条件に一致する結果がありません。</div>';
+    return;
+  }
+
+  el.innerHTML = groups.map(g => {
+    const cards = g.items.map(r => {
+      const score = r.avg_score;
+      const color = score !== null ? scoreColor(score) : 'var(--muted)';
+      const pct = r.total ? (r.scored / r.total * 100) : 0;
+      return `
+        <div class="result-card ${S.activeResult === r.filename ? 'selected' : ''}"
+          onclick="openResult('${esc(r.filename)}')">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;">
+            <div class="result-card-model">${esc(r.model || r.filename)}</div>
+            <button class="btn-icon btn-sm" style="color:var(--red);flex-shrink:0;"
+              onclick="event.stopPropagation();deleteResult('${esc(r.filename)}')" title="削除">${IC.trash}</button>
+          </div>
+          <div class="result-card-score" style="color:${color}">${score !== null ? score : '─'}<span> / 5</span></div>
+          <div class="result-card-meta">${esc(r.benchmark_title || '')}<br>${r.run_at || ''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">${r.scored}/${r.total} scored</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        </div>`;
+    }).join('');
+    return `<div class="results-cat-header" style="border-left:3px solid ${g.color}">${g.label} <span>${g.items.length}件</span></div>${cards}`;
+  }).join('');
+}
+
+async function openResult(filename) {
+  S.activeResult = filename;
+  renderSidebarResults();
+  renderResultsGrid();
+  showTab('results');
+  try {
+    const data = await fetch(`/api/result/${encodeURIComponent(filename)}`).then(r => r.json());
+    renderResultDetail(data, filename);
+    renderAddPanel(data, filename);
+  } catch(e) { console.error('openResult', e); }
+}
+
+function renderMetaParams(meta) {
+  const PARAM_LABELS = [
+    ['preset_name',       'Preset'],
+    ['temperature',       'Temp'],
+    ['max_tokens',        'Max Tokens'],
+    ['top_p',             'Top-P'],
+    ['top_k',             'Top-K'],
+    ['frequency_penalty', 'Freq Pen'],
+    ['presence_penalty',  'Pres Pen'],
+    ['repeat_penalty',    'Repeat Pen'],
+    ['min_p',             'Min-P'],
+    ['seed',              'Seed'],
+    ['stop',              'Stop'],
+    ['base_url',          'Base URL'],
+  ];
+  const items = PARAM_LABELS
+    .filter(([k]) => meta[k] != null)
+    .map(([k, label]) => {
+      const v = Array.isArray(meta[k]) ? meta[k].join(', ') : String(meta[k]);
+      return `<div class="param-item"><span class="param-key">${label}</span><span class="param-val" title="${esc(v)}">${esc(v)}</span></div>`;
+    });
+  if (meta.system_prompt) {
+    items.push(`<div class="param-item param-system"><span class="param-key">System Prompt</span><div class="param-val">${esc(meta.system_prompt)}</div></div>`);
+  }
+  if (!items.length) return '';
+  return `
+    <div class="detail-params">
+      <div class="detail-params-head" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+        ${IC.settings} Parameters
+      </div>
+      <div class="detail-params-body">${items.join('')}</div>
+    </div>`;
+}
+
+function renderResultDetail(data, filename) {
+  const meta = data.meta || {};
+  const allScores = data.domains.flatMap(d => d.questions.map(q => q.score)).filter(s => s !== null);
+  const avg = allScores.length ? (allScores.reduce((a,b) => a+b, 0) / allScores.length).toFixed(2) : null;
+  const total = data.domains.reduce((s,d) => s + d.questions.length, 0);
+
+  const domainsHtml = data.domains.map(domain => {
+    const dScores = domain.questions.map(q => q.score).filter(s => s !== null);
+    const dAvg = dScores.length ? (dScores.reduce((a,b)=>a+b,0)/dScores.length).toFixed(1) : '─';
+    return `
+      <div class="detail-domain">
+        <div class="detail-domain-head" onclick="toggleDetailDomain(this)">
+          <span class="domain-chevron">${IC.chevron}</span>
+          <span style="flex:1;">${esc(domain.label)}</span>
+          <span style="color:var(--muted);font-weight:400;font-size:12px;">avg: ${dAvg} &nbsp;·&nbsp; ${domain.questions.length}問</span>
+        </div>
+        <div class="detail-domain-body">
+        ${domain.questions.map(q => {
+          const sc = q.score;
+          const scoreBtns = [0,1,3,5].map(s => {
+            const active = sc === s ? `active-${s}` : '';
+            return `<button class="score-btn ${active}" onclick="setScore('${esc(filename)}','${esc(q.id)}',${s},this)">${s}</button>`;
+          }).join('');
+          return `
+            <div class="detail-q">
+              <div class="detail-q-header">
+                <div class="detail-q-info">
+                  <span class="q-id">${esc(q.id)}</span>
+                  <span class="q-title">${esc(q.title)}</span>
+                  <span class="q-diff">${esc(q.difficulty)}</span>
+                  <span class="q-time">${q.elapsed_sec}s</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="score-btns">${scoreBtns}</div>
+                  <button class="btn-icon btn-sm" onclick="rerunQuestion('${esc(filename)}','${esc(q.id)}')" title="再実行">${IC.refresh}</button>
+                </div>
+              </div>
+              ${q.error ? `<div class="q-error-msg">Error: ${esc(q.error)}</div>` : ''}
+              ${q.response ? `<details><summary>Response</summary><div class="q-response">${esc(q.response)}</div></details>` : ''}
+              ${(q.scoring_criteria||[]).length ? `
+                <details><summary>Scoring Criteria</summary>
+                  <div class="q-criteria">
+                    ${q.scoring_criteria.map(s => `
+                      <div class="criterion" style="border-left:3px solid ${SCORE_COLORS[s.score]||'#555'}">
+                        <b>${s.score}点</b> ${esc(s.label)}
+                      </div>`).join('')}
+                  </div>
+                </details>` : ''}
+            </div>
+          `;
+        }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('result-detail').innerHTML = `
+    <div class="detail-header">
+      <div>
+        <h2>${esc(meta.model || filename)}</h2>
+        <div class="detail-header-meta">${esc(meta.run_at?.slice(0,19).replace('T',' ') || '')} &nbsp;·&nbsp; ${esc(meta.benchmark_title || '')}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        ${resultCategory(S.results.find(r => r.filename === filename) || {}) !== 'unscored' ? `<button class="btn-primary" onclick="openReportInTab('${esc(filename)}')" style="padding:6px 16px;font-size:13px;">${IC.report} Report</button>` : ''}
+      </div>
+    </div>
+    <div class="detail-stats">
+      <div class="dstat"><div class="dstat-v">${avg || '─'}<span> / 5</span></div><div class="dstat-l">Avg Score</div></div>
+      <div class="dstat"><div class="dstat-v">${allScores.length}<span> / ${total}</span></div><div class="dstat-l">Scored</div></div>
+      <div class="dstat"><div class="dstat-v">${esc(meta.model || '─')}</div><div class="dstat-l">Model</div></div>
+    </div>
+    ${renderMetaParams(meta)}
+    ${domainsHtml}
+    <div id="add-panel" style="padding:0 8px 12px;"></div>
+  `;
+}
+
+async function setScore(filename, qid, score, btn) {
+  await fetch(`/api/result/${encodeURIComponent(filename)}/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question_id: qid, score }),
+  });
+  // Update button states
+  btn.closest('.score-btns').querySelectorAll('.score-btn').forEach(b => {
+    b.className = 'score-btn';
+  });
+  btn.className = `score-btn active-${score}`;
+  loadResults();
+}
+
+function openReportInTab(filename) {
+  window.open(`/api/result/${encodeURIComponent(filename)}/report`, '_blank');
+}
+
+async function deleteResult(filename) {
+  if (!confirm(`"${filename}" を削除しますか？\nこの操作は元に戻せません。`)) return;
+  await fetch(`/api/result/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+  if (S.activeResult === filename) {
+    S.activeResult = null;
+    document.getElementById('result-detail').innerHTML =
+      '<div class="live-info" style="margin:8px;">Select a result to view details.</div>';
+  }
+  await loadResults();
+}
+
+// ── Per-question re-run & Add questions ──────────────────────
+
+async function rerunQuestion(filename, qid) {
+  const data = await fetch(`/api/result/${encodeURIComponent(filename)}`).then(r => r.json());
+  const meta = data.meta || {};
+  if (!meta.benchmark_file) { alert('ベンチマーク情報がありません'); return; }
+  await _prepareRun(meta, filename, new Set([qid]));
+}
+
+async function renderAddPanel(data, filename) {
+  const panel = document.getElementById('add-panel');
+  if (!panel) return;
+  const benchFile = data.meta?.benchmark_file;
+  if (!benchFile) return;
+
+  let bench;
+  try { bench = await fetch(`/api/benchmark/${encodeURIComponent(benchFile)}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }); }
+  catch(e) { console.warn('renderAddPanel: benchmark fetch failed', benchFile, e); return; }
+
+  const existingIds = new Set(data.domains.flatMap(d => d.questions.map(q => q.id)));
+  const missing = bench.domains
+    .map(d => ({ ...d, questions: d.questions.filter(q => !existingIds.has(q.id)) }))
+    .filter(d => d.questions.length > 0);
+
+  if (!missing.length) { panel.innerHTML = ''; return; }
+
+  panel.innerHTML = `
+    <div class="detail-domain" style="border-left:3px solid var(--accent);">
+      <div class="detail-domain-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span>追加可能な問題</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button class="btn-ghost btn-sm" onclick="selectAllAdd(true)">All</button>
+          <button class="btn-ghost btn-sm" onclick="selectAllAdd(false)">None</button>
+          <button class="btn-primary btn-sm" onclick="runAddSelected('${esc(filename)}')">${IC.play} 選択して実行</button>
+        </div>
+      </div>
+      ${missing.map(d => `
+        <div>
+          <div class="domain-label-row" onclick="toggleAddDomainCollapse(this)" style="position:static;">
+            <span class="domain-chevron">${IC.chevron}</span>
+            <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;" onclick="event.stopPropagation()">
+              <input type="checkbox" class="add-domain-check" data-domain="${esc(d.id)}" onchange="toggleAddDomain(this)" checked>
+              <span class="domain-name">${esc(d.label)}</span>
+            </label>
+            <span class="domain-count">${d.questions.length}</span>
+          </div>
+          <div class="add-domain-questions domain-questions">
+            ${d.questions.map(q => `
+              <div class="question-item" style="cursor:default;">
+                <input type="checkbox" class="add-q-check" value="${esc(q.id)}" data-domain="${esc(d.id)}" onchange="syncAddDomainCheck('${esc(d.id)}')" checked style="cursor:pointer;flex-shrink:0;margin-top:2px;">
+                <span class="q-diff">${esc(q.difficulty)}</span>
+                <span class="q-title-text" style="flex:1;">${esc(q.title)}<br><span class="q-id-text">${esc(q.id)}</span></span>
+                <button class="btn-icon btn-sm" onclick="event.stopPropagation();rerunQuestion('${esc(filename)}','${esc(q.id)}')" title="この1問だけ実行">${IC.play}</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function toggleDetailDomain(head) {
+  head.querySelector('.domain-chevron').classList.toggle('collapsed');
+  head.nextElementSibling.classList.toggle('hidden');
+}
+
+function toggleAddDomainCollapse(header) {
+  header.querySelector('.domain-chevron').classList.toggle('collapsed');
+  header.nextElementSibling.classList.toggle('hidden');
+}
+
+function toggleAddDomain(checkbox) {
+  document.querySelectorAll(`.add-q-check[data-domain="${checkbox.dataset.domain}"]`)
+    .forEach(cb => { cb.checked = checkbox.checked; });
+}
+
+function syncAddDomainCheck(domainId) {
+  const qs = [...document.querySelectorAll(`.add-q-check[data-domain="${domainId}"]`)];
+  const domCheck = document.querySelector(`.add-domain-check[data-domain="${domainId}"]`);
+  if (domCheck) domCheck.checked = qs.some(c => c.checked);
+}
+
+function selectAllAdd(checked) {
+  document.querySelectorAll('.add-q-check').forEach(cb => { cb.checked = checked; });
+  document.querySelectorAll('.add-domain-check').forEach(cb => { cb.checked = checked; });
+}
+
+async function runAddSelected(filename) {
+  const qids = new Set([...document.querySelectorAll('.add-q-check:checked')].map(cb => cb.value));
+  if (!qids.size) { alert('問題を選択してください'); return; }
+  const data = await fetch(`/api/result/${encodeURIComponent(filename)}`).then(r => r.json());
+  const meta = data.meta || {};
+  if (!meta.benchmark_file) { alert('ベンチマーク情報がありません'); return; }
+  await _prepareRun(meta, filename, qids);
+}
+
+async function _prepareRun(meta, filename, qidSet) {
+  await selectBenchmark(meta.benchmark_file);
+  if (meta.model) document.getElementById('run-model').value = meta.model;
+  if (meta.temperature !== undefined) document.getElementById('run-temp').value = meta.temperature;
+  if (meta.max_tokens !== undefined) document.getElementById('run-maxtokens').value = meta.max_tokens;
+  document.querySelectorAll('.q-check').forEach(cb => { cb.checked = qidSet.has(cb.value); });
+  document.querySelectorAll('.domain-check input').forEach(cb => {
+    const dId = cb.closest('.domain-group')?.querySelector('.domain-questions')?.id?.replace('dq-', '');
+    if (dId) cb.checked = [...document.querySelectorAll(`#dq-${dId} .q-check`)].some(c => c.checked);
+  });
+  S.appendToFile = filename;
+  document.getElementById('append-filename').textContent = filename;
+  document.getElementById('append-banner').classList.add('show');
+  updateRunCount();
+  showTab('run');
+}
+
+function clearAppend() {
+  S.appendToFile = null;
+  document.getElementById('append-banner').classList.remove('show');
+  document.getElementById('append-filename').textContent = '';
+}
+
+// ── Compare ──────────────────────────────────────────────────
+// ── Compare ──────────────────────────────────────────────────
+function renderCmpBenchmarks() {
+  const el = document.getElementById('cmp-bench-list');
+  if (!el) return;
+  el.innerHTML = S.benchmarks.map(b => `
+    <div class="file-item ${S.cmpBenchmark === b.filename ? 'selected' : ''}"
+         onclick="selectCmpBenchmark('${esc(b.filename)}')"
+         ${b.description ? `title="${esc(b.description)}"` : ''}>
+      <div class="file-name">${esc(b.filename)}</div>
+      <div class="file-meta">${b.total_questions}問 · ${b.total_domains}ドメイン</div>
+    </div>
+  `).join('');
+}
+
+function selectCmpBenchmark(filename) {
+  S.cmpBenchmark = filename;
+  S.cmpSelected = [];
+  S.cmpCache = {};
+  renderCmpBenchmarks();
+  renderCmpResults();
+  document.getElementById('compare-main').innerHTML =
+    '<div class="live-info">比較する結果を2つ選んでください。</div>';
+}
+
+function renderCmpResults() {
+  const el = document.getElementById('cmp-result-list');
+  const countEl = document.getElementById('cmp-sel-count');
+  if (!el) return;
+  countEl.textContent = `${S.cmpSelected.length}/2`;
+
+  if (!S.cmpBenchmark) {
+    el.innerHTML = '<div style="padding:10px 12px;color:var(--muted);font-size:12px;">ベンチマークを選択してください</div>';
+    return;
+  }
+
+  const bench = S.benchmarks.find(b => b.filename === S.cmpBenchmark);
+  const filtered = S.results.filter(r =>
+    r.benchmark_file
+      ? r.benchmark_file === S.cmpBenchmark
+      : bench && r.benchmark_title === bench.title
+  );
+
+  if (!filtered.length) {
+    el.innerHTML = '<div style="padding:10px 12px;color:var(--muted);font-size:12px;">このベンチマークの結果がありません</div>';
+    return;
+  }
+
+  const groups = [
+    { key: 'scored',   label: '採点済み', items: filtered.filter(r => resultCategory(r) === 'scored') },
+    { key: 'partial',  label: '採点中',   items: filtered.filter(r => resultCategory(r) === 'partial') },
+    { key: 'unscored', label: '未採点',   items: filtered.filter(r => resultCategory(r) === 'unscored') },
+  ].filter(g => g.items.length > 0);
+
+  el.innerHTML = groups.map(g =>
+    `<div class="sidebar-cat-label">${g.label} (${g.items.length})</div>` +
+    g.items.map(r => {
+      const isA = S.cmpSelected[0] === r.filename;
+      const isB = S.cmpSelected[1] === r.filename;
+      const badge = isA ? `<span class="cmp-badge cmp-badge-a" style="margin-right:4px;">A</span>`
+                  : isB ? `<span class="cmp-badge cmp-badge-b" style="margin-right:4px;">B</span>` : '';
+      const selStyle = isA ? 'border-left-color:var(--accent);background:#378ADD10;'
+                     : isB ? 'border-left-color:var(--green);background:#1D9E7510;' : '';
+      const score = r.avg_score !== null ? r.avg_score : null;
+      const scoreHtml = score !== null
+        ? `<span class="score-pill" style="background:${scoreColor(score)}22;color:${scoreColor(score)}">${score}/5</span> `
+        : '';
+      return `
+        <div class="file-item ${(isA || isB) ? 'selected' : ''}" style="${selStyle}"
+             onclick="toggleCmpResult('${esc(r.filename)}')">
+          <div class="file-name">${badge}${esc(r.model || r.filename)}</div>
+          <div class="file-meta">${scoreHtml}${r.run_at?.slice(0,10) || ''} · ${r.scored}/${r.total}</div>
+        </div>`;
+    }).join('')
+  ).join('');
+}
+
+async function toggleCmpResult(filename) {
+  const idx = S.cmpSelected.indexOf(filename);
+  if (idx >= 0) {
+    S.cmpSelected.splice(idx, 1);
+  } else {
+    if (S.cmpSelected.length >= 2) S.cmpSelected.shift();
+    S.cmpSelected.push(filename);
+  }
+  renderCmpResults();
+  if (S.cmpSelected.length === 2) {
+    await renderCompare();
+  } else {
+    document.getElementById('compare-main').innerHTML =
+      '<div class="live-info">比較する結果を2つ選んでください。</div>';
+  }
+}
+
+async function renderCompare() {
+  const [fnA, fnB] = S.cmpSelected;
+  const main = document.getElementById('compare-main');
+  main.innerHTML = '<div class="live-info">Loading...</div>';
+  try {
+    if (!S.cmpCache[fnA]) S.cmpCache[fnA] = await fetch(`/api/result/${encodeURIComponent(fnA)}`).then(r => r.json());
+    if (!S.cmpCache[fnB]) S.cmpCache[fnB] = await fetch(`/api/result/${encodeURIComponent(fnB)}`).then(r => r.json());
+    const dA = S.cmpCache[fnA], dB = S.cmpCache[fnB];
+
+    const benchData = await fetch(`/api/benchmark/${encodeURIComponent(S.cmpBenchmark)}`).then(r => r.json());
+
+    const qMapA = {}, qMapB = {};
+    for (const d of dA.domains || []) for (const q of d.questions) qMapA[q.id] = q;
+    for (const d of dB.domains || []) for (const q of d.questions) qMapB[q.id] = q;
+
+    const scoresA = Object.values(qMapA).map(q => q.score).filter(s => s != null);
+    const scoresB = Object.values(qMapB).map(q => q.score).filter(s => s != null);
+    const avgA = scoresA.length ? (scoresA.reduce((a,b)=>a+b,0)/scoresA.length).toFixed(2) : null;
+    const avgB = scoresB.length ? (scoresB.reduce((a,b)=>a+b,0)/scoresB.length).toFixed(2) : null;
+
+    const scoreHtml = (avg, cls) => avg != null
+      ? `<div class="cmp-model-score ${cls}">${avg}<span> / 5</span></div>` : '';
+
+    const sideHtml = qX => {
+      if (!qX) return `<div class="cmp-q-side missing">(未実施)</div>`;
+      const sc = qX.score;
+      const badge = sc != null
+        ? `<span class="score-pill" style="background:${SCORE_COLORS[sc]}25;color:${SCORE_COLORS[sc]};border:1px solid ${SCORE_COLORS[sc]}40;">${sc}/5</span> `
+        : '';
+      const resp = qX.response
+        ? `<div class="cmp-q-response">${esc(qX.response)}</div>`
+        : `<div style="color:var(--red);font-size:11px;">Error: ${esc(qX.error||'')}</div>`;
+      return `<div class="cmp-q-side">${badge}${resp}</div>`;
+    };
+
+    let html = `
+      <div class="cmp-header">
+        <div class="cmp-model-card" style="border-top-color:var(--accent);">
+          <div class="cmp-model-label">A</div>
+          <div class="cmp-model-name">${esc(dA.meta?.model || fnA)}</div>
+          ${scoreHtml(avgA, '')}
+          <div class="cmp-model-meta">${esc(dA.meta?.run_at?.slice(0,19).replace('T',' ')||'')} · ${scoresA.length}/${Object.keys(qMapA).length}問採点</div>
+        </div>
+        <div class="cmp-model-card" style="border-top-color:var(--green);">
+          <div class="cmp-model-label">B</div>
+          <div class="cmp-model-name">${esc(dB.meta?.model || fnB)}</div>
+          ${scoreHtml(avgB, 'b')}
+          <div class="cmp-model-meta">${esc(dB.meta?.run_at?.slice(0,19).replace('T',' ')||'')} · ${scoresB.length}/${Object.keys(qMapB).length}問採点</div>
+        </div>
+      </div>`;
+
+    for (const domain of benchData.domains) {
+      html += `<div class="cmp-domain-head">${esc(domain.label)}</div>`;
+      for (const q of domain.questions) {
+        html += `
+          <div class="cmp-q-row">
+            <div class="cmp-q-meta">
+              <span class="q-id">${esc(q.id)}</span>
+              <span class="q-diff">${esc(q.difficulty)}</span>
+              <span class="q-title" style="flex:1;">${esc(q.title)}</span>
+            </div>
+            <div class="cmp-q-sides">
+              ${sideHtml(qMapA[q.id])}
+              ${sideHtml(qMapB[q.id])}
+            </div>
+          </div>`;
+      }
+    }
+
+    main.innerHTML = html;
+  } catch(e) {
+    main.innerHTML = `<div class="live-info" style="color:var(--red);">Error: ${esc(e.message)}</div>`;
+    console.error('renderCompare', e);
+  }
+}
+
+// ── Utilities ────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Start ────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
