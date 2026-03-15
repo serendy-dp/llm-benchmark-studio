@@ -1689,12 +1689,15 @@ async function renderCompare() {
       if (!qX) return `<div class="cmp-q-side missing">(未実施)</div>`;
       const sc = qX.score;
       const badge = sc != null
-        ? `<span class="score-pill" style="background:${SCORE_COLORS[sc]}25;color:${SCORE_COLORS[sc]};border:1px solid ${SCORE_COLORS[sc]}40;">${sc}/5</span> `
+        ? `<span class="score-pill" style="background:${SCORE_COLORS[sc]}25;color:${SCORE_COLORS[sc]};border:1px solid ${SCORE_COLORS[sc]}40;">${sc}/5</span>`
+        : '';
+      const time = qX.elapsed_sec != null
+        ? `<span style="font-size:11px;color:var(--muted);margin-left:6px;">${IC.clock} ${qX.elapsed_sec}s</span>`
         : '';
       const resp = qX.response
         ? `<div class="cmp-q-response">${esc(qX.response)}</div>`
         : `<div style="color:var(--red);font-size:11px;">Error: ${esc(qX.error||'')}</div>`;
-      return `<div class="cmp-q-side">${badge}${resp}</div>`;
+      return `<div class="cmp-q-side"><div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">${badge}${time}</div>${resp}</div>`;
     };
 
     let html = `
