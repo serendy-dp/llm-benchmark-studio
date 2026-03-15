@@ -214,6 +214,9 @@ button { cursor: pointer; font-size: 12px; border: none; border-radius: 5px; pad
 .score-btn.active-1 { background: #E8A83820; color: #E8A838; border-color: #E8A838; }
 .score-btn.active-0 { background: #D4537E20; color: #D4537E; border-color: #D4537E; }
 .q-error-msg { color: var(--red); font-size: 12px; margin: 4px 0; }
+.score-comment { width: 100%; margin-top: 6px; font-size: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; color: var(--text); resize: vertical; min-height: 36px; font-family: inherit; box-sizing: border-box; line-height: 1.5; }
+.score-comment:focus { outline: none; border-color: var(--accent); }
+.score-comment.has-content { border-color: var(--accent); }
 details summary { font-size: 11px; color: var(--accent); cursor: pointer; padding: 3px 0; user-select: none; }
 details summary:hover { text-decoration: underline; }
 .q-response { font-size: 12px; font-family: "SF Mono", "Consolas", monospace; white-space: pre-wrap; word-break: break-word; line-height: 1.6; background: var(--surface2); border-radius: 5px; padding: 8px; margin-top: 6px; max-height: 300px; overflow-y: auto; }
@@ -1202,6 +1205,10 @@ function renderResultDetail(data, filename) {
                   <button class="btn-icon btn-sm" onclick="rerunQuestion('${esc(filename)}','${esc(q.id)}')" title="再実行">${IC.refresh}</button>
                 </div>
               </div>
+              <textarea class="score-comment${q.score_comment ? ' has-content' : ''}"
+                placeholder="採点コメント..."
+                onblur="saveComment('${esc(filename)}','${esc(q.id)}',this)"
+                >${q.score_comment ? esc(q.score_comment) : ''}</textarea>
               ${q.error ? `<div class="q-error-msg">Error: ${esc(q.error)}</div>` : ''}
               ${q.response ? `<details><summary>Response</summary><div class="q-response">${esc(q.response)}</div></details>` : ''}
               ${(q.scoring_criteria||[]).length ? `
@@ -1248,12 +1255,21 @@ async function setScore(filename, qid, score, btn) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question_id: qid, score }),
   });
-  // Update button states
   btn.closest('.score-btns').querySelectorAll('.score-btn').forEach(b => {
     b.className = 'score-btn';
   });
   btn.className = `score-btn active-${score}`;
   loadResults();
+}
+
+async function saveComment(filename, qid, el) {
+  const comment = el.value.trim() || null;
+  await fetch(`/api/result/${encodeURIComponent(filename)}/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question_id: qid, score_comment: comment }),
+  });
+  el.classList.toggle('has-content', !!comment);
 }
 
 function openReportInTab(filename) {

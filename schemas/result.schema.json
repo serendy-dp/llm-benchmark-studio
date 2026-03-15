@@ -67,7 +67,7 @@
     "result_question": {
       "description": "1問分の実行結果",
       "type": "object",
-      "required": ["id", "title", "difficulty", "tags", "status", "response", "elapsed_sec", "usage", "error", "score", "scoring_criteria"],
+      "required": ["id", "title", "difficulty", "tags", "status", "response", "elapsed_sec", "usage", "error", "score", "scoring_criteria", "score_comment"],
       "additionalProperties": false,
       "properties": {
         "id":         { "type": "string", "description": "問題識別子" },
@@ -109,6 +109,10 @@
           "type": ["integer", "null"],
           "enum": [0, 1, 3, 5, null],
           "description": "採点結果。未採点は null、採点済みは 0/1/3/5"
+        },
+        "score_comment": {
+          "type": ["string", "null"],
+          "description": "採点コメント。採点根拠・判定理由を自由記述する。未記入は null"
         },
         "scoring_criteria": {
           "description": "採点基準一覧（ベンチマーク定義からコピー）",

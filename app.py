@@ -160,6 +160,7 @@ async def get_result(filename: str):
 class ScoreUpdate(BaseModel):
     question_id: str
     score: Optional[int] = None
+    score_comment: Optional[str] = None
 
 
 @app.post("/api/result/{filename}/score")
@@ -173,7 +174,10 @@ async def update_score(filename: str, update: ScoreUpdate):
     for domain in data.get("domains", []):
         for q in domain["questions"]:
             if q["id"] == update.question_id:
-                q["score"] = update.score
+                if "score" in update.model_fields_set:
+                    q["score"] = update.score
+                if "score_comment" in update.model_fields_set:
+                    q["score_comment"] = update.score_comment
                 save_json(path, data)
                 _maybe_promote(path, data)
                 return {"ok": True}
@@ -443,14 +447,15 @@ async def run_benchmark(config: RunConfig):
                     "status": "error" if error_msg else "success",
                     "response": full_response if not error_msg else None,
                     "elapsed_sec": elapsed, "usage": {},
-                    "error": error_msg, "score": None,
+                    "error": error_msg, "score": None, "score_comment": None,
                     "scoring_criteria": q.get("scoring", []),
                 }
-                # 既存エントリがあれば score を引き継いだ上で上書き、なければ追加
+                # 既存エントリがあれば score / score_comment を引き継いだ上で上書き、なければ追加
                 existing_qs = domain_map[d_id]["questions"]
                 existing_idx = next((i for i, eq in enumerate(existing_qs) if eq["id"] == q["id"]), None)
                 if existing_idx is not None:
                     new_entry["score"] = existing_qs[existing_idx].get("score")
+                    new_entry["score_comment"] = existing_qs[existing_idx].get("score_comment")
                     existing_qs[existing_idx] = new_entry
                 else:
                     existing_qs.append(new_entry)
