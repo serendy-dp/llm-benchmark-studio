@@ -257,6 +257,12 @@ details summary:hover { text-decoration: underline; }
 .cmp-q-side:last-child { border-right: none; }
 .cmp-q-response { font-family: "SF Mono", "Consolas", monospace; white-space: pre-wrap; word-break: break-word; line-height: 1.6; max-height: 220px; overflow-y: auto; margin-top: 4px; }
 .cmp-q-side.missing { color: var(--muted); font-style: italic; display: flex; align-items: center; }
+.cmp-q-prompt-wrap { border-bottom: 1px solid var(--border); }
+.cmp-q-prompt-wrap summary { padding: 5px 12px; font-size: 11px; color: var(--accent); cursor: pointer; user-select: none; list-style: none; display: flex; align-items: center; gap: 4px; }
+.cmp-q-prompt-wrap summary:hover { background: var(--surface3); }
+.cmp-q-prompt-wrap summary::before { content: '▶'; font-size: 9px; transition: transform .15s; }
+.cmp-q-prompt-wrap details[open] summary::before { transform: rotate(90deg); }
+.cmp-q-prompt { padding: 8px 12px 10px; font-size: 12px; font-family: "SF Mono","Consolas",monospace; white-space: pre-wrap; line-height: 1.65; color: var(--text); background: var(--bg); max-height: 260px; overflow-y: auto; }
 
 /* Result category */
 .sidebar-cat-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 6px 12px 3px; margin-top: 4px; }
@@ -1710,6 +1716,14 @@ async function renderCompare() {
     for (const domain of benchData.domains) {
       html += `<div class="cmp-domain-head">${esc(domain.label)}</div>`;
       for (const q of domain.questions) {
+        const promptSection = q.prompt
+          ? `<div class="cmp-q-prompt-wrap">
+               <details>
+                 <summary>問題文</summary>
+                 <div class="cmp-q-prompt">${esc(q.prompt)}</div>
+               </details>
+             </div>`
+          : '';
         html += `
           <div class="cmp-q-row">
             <div class="cmp-q-meta">
@@ -1717,6 +1731,7 @@ async function renderCompare() {
               <span class="q-diff">${esc(q.difficulty)}</span>
               <span class="q-title" style="flex:1;">${esc(q.title)}</span>
             </div>
+            ${promptSection}
             <div class="cmp-q-sides">
               ${sideHtml(qMapA[q.id])}
               ${sideHtml(qMapB[q.id])}
