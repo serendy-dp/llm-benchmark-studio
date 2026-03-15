@@ -126,12 +126,12 @@
 レポートを以下のパスに保存する：
 
 ```
-results/reports/<benchmark_stemname>_compare_<YYYYMMDD>.md
+results/reports/compare/<benchmark_stemname>_compare_<YYYYMMDD>.md
 ```
 
 ディレクトリが存在しない場合は作成する：
 ```bash
-mkdir -p results/reports/
+mkdir -p results/reports/compare/
 ```
 
 その後、保存先パスをユーザーに報告する。

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Benchmark Report — lfm2.5-1.2b-jp-mlx</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: #2e3347; --text: #e2e8f0; --muted: #8892a4;
+    --accent: #378ADD;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", sans-serif; font-size: 14px; }
+  a { color: var(--accent); }
+
+  /* ── ヘッダー ── */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 24px 32px; }
+  .header h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .header-meta { color: var(--muted); font-size: 12px; }
+  .header-meta span { margin-right: 16px; }
+
+  /* ── サマリー ── */
+  .summary { display: flex; gap: 16px; padding: 24px 32px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 24px; flex: 1; min-width: 150px;
+  }
+  .stat-value { font-size: 36px; font-weight: 800; line-height: 1; }
+  .stat-label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  /* ── チャートセクション ── */
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 32px 24px; }
+  @media (max-width: 800px) { .charts { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px; position: relative;
+  }
+  .chart-title { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+  .chart-wrap { position: relative; height: 280px; }
+
+  /* ── ドメインカード ── */
+  .domains { padding: 0 32px 48px; display: flex; flex-direction: column; gap: 20px; }
+  .domain-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  }
+  .domain-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; background: var(--surface2);
+  }
+  .domain-label { font-weight: 700; font-size: 15px; }
+  .domain-count { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .domain-avg { font-size: 28px; font-weight: 800; }
+  .domain-avg-denom { font-size: 14px; font-weight: 400; color: var(--muted); }
+
+  /* ── 問題カード ── */
+  .q-card { padding: 14px 20px; border-top: 1px solid var(--border); }
+  .q-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .q-title { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .q-id { color: var(--muted); font-size: 11px; font-family: monospace; }
+  .q-name { font-weight: 600; }
+  .q-diff { color: var(--muted); font-size: 12px; }
+  .q-meta { color: var(--muted); font-size: 11px; }
+  .badge {
+    display: inline-block; min-width: 32px; text-align: center;
+    padding: 3px 10px; border-radius: 20px; color: #fff;
+    font-size: 13px; font-weight: 700;
+  }
+
+  /* ── スコアバー ── */
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .score-bar { height: 6px; border-radius: 3px; transition: width 0.4s; }
+  .score-label { font-size: 11px; font-weight: 700; }
+
+  /* ── 詳細 ── */
+  details summary {
+    cursor: pointer; color: var(--accent); font-size: 12px;
+    padding: 4px 0; user-select: none;
+  }
+  details summary:hover { text-decoration: underline; }
+  .q-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  @media (max-width: 700px) { .q-detail { grid-template-columns: 1fr; } }
+  .detail-section { background: var(--surface2); border-radius: 8px; padding: 12px; }
+  .detail-label { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
+  .response-block { font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+  .error-block { font-size: 12px; color: #D4537E; white-space: pre-wrap; }
+  .criterion { padding: 5px 8px; margin-bottom: 4px; border-radius: 4px; font-size: 12px; background: var(--bg); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>LLM Agent Orchestration Benchmark</h1>
+  <div class="header-meta">
+    <span>モデル: <b>lfm2.5-1.2b-jp-mlx</b></span>
+    <span>実行日時: 2026-03-16 02:26:04</span>
+    <span>v1.0</span>
+  </div>
+</div>
+
+<div class="summary">
+  <div class="stat-card">
+    <div class="stat-value" style="color:#1D9E75">0.0<span style="font-size:18px">%</span></div>
+    <div class="stat-label">総合スコア</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">0<span style="font-size:18px"> / 0</span></div>
+    <div class="stat-label">合計点</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">0.00<span style="font-size:18px"> / 5</span></div>
+    <div class="stat-label">平均スコア</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">0<span style="font-size:18px"> / 10</span></div>
+    <div class="stat-label">採点済み問数</div>
+  </div>
+</div>
+
+<div class="charts">
+  <div class="chart-card">
+    <div class="chart-title">ドメイン別スコア（レーダー）</div>
+    <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">ドメイン別平均スコア（バー）</div>
+    <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+  </div>
+</div>
+
+<div class="domains">
+  
+        <div class="domain-card">
+            <div class="domain-header" style="border-left:5px solid #1D9E75">
+                <div>
+                    <span class="domain-label">リンクナビゲーション</span>
+                    <span class="domain-count">0/5問採点</span>
+                </div>
+                <div class="domain-avg" style="color:#1D9E75">─<span class="domain-avg-denom">/5</span></div>
+            </div>
+            
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">link_navigation_01</span>
+                        <span class="q-name">標準的なリンク選択</span>
+                        <span class="q-diff">★★</span>
+                    </div>
+                    <div class="q-meta">5.2秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">/recruit</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> /toiawase のみを返す・余計な説明や記号なし</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> /toiawase を返すが説明文・引用符・改行等を付加している</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> /toiawase 以外の関連URLを選択する（例: /sitemap, /company）</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> URLを返さない、または無関係な回答</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">link_navigation_02</span>
+                        <span class="q-name">変則リンクテキストの意味理解</span>
+                        <span class="q-diff">★★★</span>
+                    </div>
+                    <div class="q-meta">0.6秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">/thinking（テキスト: 考え方）</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> /connect のみを正確に返す・「つながる」の意味的解釈が正しい</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> /connect を返すが説明を付加する、または迷いを示す</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> /about や /thinking など問い合わせと無関係のURLを選ぶ</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> URLを返さない、または全候補を列挙する</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">link_navigation_03</span>
+                        <span class="q-name">フッターリンクからの選択</span>
+                        <span class="q-diff">★★</span>
+                    </div>
+                    <div class="q-meta">0.3秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">inquiry</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> /inquiry のみを正確に返す</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> /inquiry を返すが不要な出力を付加する</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> /privacy や /terms など法的ページを誤選択する</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> URLを返さない、または無関係な回答</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">link_navigation_04</span>
+                        <span class="q-name">複数候補からの絞り込み</span>
+                        <span class="q-diff">★★★</span>
+                    </div>
+                    <div class="q-meta">0.3秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">/contact/support</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> /contact・/contact/sales・/contact/support のいずれか1つのみを返す</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> /contact 系を選ぶが複数URLを列挙する、または説明を付加する</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> /support や /faq を選択する（間接的関連に留まる）</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> URLを返さない、または /docs など無関係なURLを選ぶ</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">link_navigation_05</span>
+                        <span class="q-name">ノイズURLを含む罠の回避</span>
+                        <span class="q-diff">★★★★</span>
+                    </div>
+                    <div class="q-meta">0.3秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">/aboutus</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> /reach-out を正確に選択・/contact-us-story の罠に引っかからない</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> /reach-out を選ぶが迷いを示す、または説明で誤認を示唆する</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> /contact-us-story を選ぶ（URLの contact 部分に引っかかる）</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> URLを返さない、または /newsletter・/advertise など明らかに無関係なURLを選ぶ</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+        </div>
+        <div class="domain-card">
+            <div class="domain-header" style="border-left:5px solid #378ADD">
+                <div>
+                    <span class="domain-label">探索継続判断</span>
+                    <span class="domain-count">0/2問採点</span>
+                </div>
+                <div class="domain-avg" style="color:#378ADD">─<span class="domain-avg-denom">/5</span></div>
+            </div>
+            
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">exploration_judgment_01</span>
+                        <span class="q-name">訪問履歴を踏まえた次ページ選択</span>
+                        <span class="q-diff">★★★</span>
+                    </div>
+                    <div class="q-meta">0.3秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">/contact</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> /contact のみを正確に返す・訪問済み情報を活用した合理的選択</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> /contact を返すが説明を加える、または他候補も挙げる</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> /service/detail や /company/history など探索優先度の低いURLを選ぶ</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> URLを返さない、または訪問済みURLを再選択する</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">exploration_judgment_02</span>
+                        <span class="q-name">探索打ち切り判断とメタ認知</span>
+                        <span class="q-diff">★★★★★</span>
+                    </div>
+                    <div class="q-meta">1.8秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">B
+
+状況: 30ページ訪問済みでニュース記事ページのみを閲覧。未発見のフォームがないことから、サイト構造に問い合わせフォームが存在しないと判断できるため、探索を終了するのが適切です。</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> B または C を選択し・ニュース記事にフォームが存在しない根拠など妥当な理由を1行で明示</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> B または C を選ぶが理由が曖昧・根拠に乏しい、または理由を省略している</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> B または C を選ぶが理由が矛盾している、またはアルファベット以外の形式で回答</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> A を選択してニュース記事の探索継続を提案する</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+        </div>
+        <div class="domain-card">
+            <div class="domain-header" style="border-left:5px solid #7F77DD">
+                <div>
+                    <span class="domain-label">フォーム解析</span>
+                    <span class="domain-count">0/3問採点</span>
+                </div>
+                <div class="domain-avg" style="color:#7F77DD">─<span class="domain-avg-denom">/5</span></div>
+            </div>
+            
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">form_analysis_01</span>
+                        <span class="q-name">HTMLフォームの用途分類</span>
+                        <span class="q-diff">★★</span>
+                    </div>
+                    <div class="q-meta">0.3秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">D</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> B のみを返す・school/resume/pr フィールドと /recruit/apply を正しく採用フォームと判定</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> B を返すが説明を付加する</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> A を選択する（お問い合わせと誤認、フォームの一部を正しく認識している）</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> C または D を選択する、またはアルファベット以外の形式で回答</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">form_analysis_02</span>
+                        <span class="q-name">複数フォームからお問い合わせを特定</span>
+                        <span class="q-diff">★★★</span>
+                    </div>
+                    <div class="q-meta">0.3秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">2</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> 3 のみを返す・/contact/send と message フィールドを正しく判定</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> 3 を返すが説明・番号以外の出力を付加する</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> 1 を選択する（メルマガ登録をお問い合わせと誤認）</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> 2 を選択する、または数字以外の形式で回答</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+            <div class="q-card">
+                <div class="q-header">
+                    <div class="q-title">
+                        <span class="q-id">form_analysis_03</span>
+                        <span class="q-name">曖昧なリード獲得フォームのスコアリング</span>
+                        <span class="q-diff">★★★★</span>
+                    </div>
+                    <div class="q-meta">0.3秒</div>
+                    <span class="badge" style="background:#CCCCCC">─</span>
+                </div>
+                <details>
+                    <summary>レスポンスと採点基準を表示</summary>
+                    <div class="q-detail">
+                        <div class="detail-section">
+                            <div class="detail-label">レスポンス</div>
+                            <div class="response-block">0</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">採点基準</div>
+                            <div class="criterion" style="border-left:3px solid #1D9E75"><b>5点</b> 30〜60 の値を返す・/api/v1/lead・work_email・job_title・Request a Demo からリード獲得用と適切に低評価</div><div class="criterion" style="border-left:3px solid #378ADD"><b>3点</b> 25〜70 の値を返す（概ね正しいが過大または過小評価）</div><div class="criterion" style="border-left:3px solid #E8A838"><b>1点</b> 70〜85 の値を返す（一般問い合わせとほぼ同等と過大評価・リード獲得の特徴を見落とす）</div><div class="criterion" style="border-left:3px solid #D4537E"><b>0点</b> 85 以上または 20 未満の値を返す、あるいは数値以外の形式で回答</div>
+                        </div>
+                    </div>
+                </details>
+                
+        <div class="score-bar-wrap">
+            <div class="score-bar" style="width:0%;background:#CCCCCC"></div>
+            <span class="score-label" style="color:#CCCCCC">─</span>
+        </div>
+            </div>
+        </div>
+</div>
+
+<script>
+const radarCtx = document.getElementById('radarChart').getContext('2d');
+new Chart(radarCtx, {
+  type: 'radar',
+  data: {
+    labels: ["リンクナビゲーション", "探索継続判断", "フォーム解析"],
+    datasets: [{
+      label: 'スコア',
+      data: [0, 0, 0],
+      backgroundColor: 'rgba(55,138,221,0.15)',
+      borderColor: '#378ADD',
+      pointBackgroundColor: ["#1D9E75", "#378ADD", "#7F77DD"],
+      pointRadius: 5,
+      borderWidth: 2,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      r: {
+        min: 0, max: 5, ticks: { stepSize: 1, color: '#8892a4', backdropColor: 'transparent' },
+        grid: { color: '#2e3347' },
+        angleLines: { color: '#2e3347' },
+        pointLabels: { color: '#e2e8f0', font: { size: 11 } },
+      }
+    },
+    plugins: { legend: { display: false } },
+  }
+});
+
+const barCtx = document.getElementById('barChart').getContext('2d');
+new Chart(barCtx, {
+  type: 'bar',
+  data: {
+    labels: ["リンクナビゲーション", "探索継続判断", "フォーム解析"],
+    datasets: [{
+      label: '平均スコア',
+      data: [0, 0, 0],
+      backgroundColor: ["#1D9E75", "#378ADD", "#7F77DD"],
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      y: { min: 0, max: 5, ticks: { color: '#8892a4' }, grid: { color: '#2e3347' } },
+      x: { ticks: { color: '#8892a4', font: { size: 10 } }, grid: { display: false } },
+    },
+    plugins: { legend: { display: false } },
+  }
+});
+</script>
+</body>
+</html>

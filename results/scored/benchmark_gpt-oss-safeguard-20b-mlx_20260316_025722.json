@@ -1,0 +1,383 @@
+{
+  "meta": {
+    "benchmark_title": "Webフォーム検出・ナビゲーション判断ベンチマーク",
+    "benchmark_version": "1.0",
+    "benchmark_file": "form_detect_benchmark.json",
+    "model": "gpt-oss-safeguard-20b-mlx",
+    "base_url": "http://localhost:1234",
+    "run_at": "2026-03-16T02:57:22.626014",
+    "system_prompt": "あなたは優秀なAIエージェントです。指示に従い、構造的・論理的に回答してください。",
+    "temperature": 0.7,
+    "max_tokens": 4096,
+    "top_p": null,
+    "top_k": null,
+    "frequency_penalty": null,
+    "presence_penalty": null,
+    "repeat_penalty": null,
+    "min_p": null,
+    "seed": null,
+    "stop": null,
+    "preset_name": null
+  },
+  "domains": [
+    {
+      "id": "link_navigation",
+      "label": "リンクナビゲーション",
+      "questions": [
+        {
+          "id": "link_navigation_01",
+          "title": "標準的なリンク選択",
+          "difficulty": "★★",
+          "tags": [
+            "リンク選択",
+            "キーワード認識",
+            "出力制御"
+          ],
+          "status": "success",
+          "response": "/toiawase",
+          "elapsed_sec": 7.9,
+          "usage": {},
+          "error": null,
+          "score": 5,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "/toiawase または https://example-corp.co.jp/toiawase のみを返す・余計な説明や記号なし"
+            },
+            {
+              "score": 3,
+              "label": "/toiawase（またはフルURL）を返すが説明文・引用符・改行等を付加している"
+            },
+            {
+              "score": 1,
+              "label": "/toiawase 以外の関連URLを選択する（例: /sitemap, /company）"
+            },
+            {
+              "score": 0,
+              "label": "URLを返さない、または無関係な回答"
+            }
+          ]
+        },
+        {
+          "id": "link_navigation_02",
+          "title": "変則リンクテキストの意味理解",
+          "difficulty": "★★★",
+          "tags": [
+            "意味理解",
+            "変則テキスト",
+            "リンク選択"
+          ],
+          "status": "success",
+          "response": "/connect",
+          "elapsed_sec": 7.3,
+          "usage": {},
+          "error": null,
+          "score": 5,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "/connect または https://consulting-firm.co.jp/connect のみを返す・「つながる」の意味的解釈が正しい"
+            },
+            {
+              "score": 3,
+              "label": "/connect（またはフルURL）を返すが説明を付加する、または迷いを示す"
+            },
+            {
+              "score": 1,
+              "label": "/about や /thinking など問い合わせと無関係のURLを選ぶ"
+            },
+            {
+              "score": 0,
+              "label": "URLを返さない、または全候補を列挙する"
+            }
+          ]
+        },
+        {
+          "id": "link_navigation_03",
+          "title": "フッターリンクからの選択",
+          "difficulty": "★★",
+          "tags": [
+            "リンク選択",
+            "文脈理解",
+            "フッター"
+          ],
+          "status": "success",
+          "response": "/inquiry",
+          "elapsed_sec": 5.4,
+          "usage": {},
+          "error": null,
+          "score": 5,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "/inquiry または https://manufacturer.jp/inquiry のみを返す"
+            },
+            {
+              "score": 3,
+              "label": "/inquiry（またはフルURL）を返すが不要な出力を付加する"
+            },
+            {
+              "score": 1,
+              "label": "/privacy や /terms など法的ページを誤選択する"
+            },
+            {
+              "score": 0,
+              "label": "URLを返さない、または無関係な回答"
+            }
+          ]
+        },
+        {
+          "id": "link_navigation_04",
+          "title": "複数候補からの絞り込み",
+          "difficulty": "★★★",
+          "tags": [
+            "候補絞り込み",
+            "優先順位判断",
+            "リンク選択"
+          ],
+          "status": "success",
+          "response": "/contact",
+          "elapsed_sec": 8.2,
+          "usage": {},
+          "error": null,
+          "score": 5,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "/contact・/contact/sales・/contact/support のいずれか（パスまたはフルURL）を1つのみ返す"
+            },
+            {
+              "score": 3,
+              "label": "/contact 系を選ぶが複数URLを列挙する、または説明を付加する"
+            },
+            {
+              "score": 1,
+              "label": "/support や /faq を選択する（間接的関連に留まる）"
+            },
+            {
+              "score": 0,
+              "label": "URLを返さない、または /docs など無関係なURLを選ぶ"
+            }
+          ]
+        },
+        {
+          "id": "link_navigation_05",
+          "title": "ノイズURLを含む罠の回避",
+          "difficulty": "★★★★",
+          "tags": [
+            "ノイズ排除",
+            "URL意味解釈",
+            "誤認回避"
+          ],
+          "status": "success",
+          "response": "/reach-out",
+          "elapsed_sec": 9.5,
+          "usage": {},
+          "error": null,
+          "score": 5,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "/reach-out または https://media-company.co.jp/reach-out のみを返す・/contact-us-story の罠に引っかからない"
+            },
+            {
+              "score": 3,
+              "label": "/reach-out（またはフルURL）を選ぶが迷いを示す、または説明で誤認を示唆する"
+            },
+            {
+              "score": 1,
+              "label": "/contact-us-story を選ぶ（URLの contact 部分に引っかかる）"
+            },
+            {
+              "score": 0,
+              "label": "URLを返さない、または /newsletter・/advertise など明らかに無関係なURLを選ぶ"
+            }
+          ],
+          "score_comment": null
+        }
+      ]
+    },
+    {
+      "id": "exploration_judgment",
+      "label": "探索継続判断",
+      "questions": [
+        {
+          "id": "exploration_judgment_01",
+          "title": "訪問履歴を踏まえた次ページ選択",
+          "difficulty": "★★★",
+          "tags": [
+            "探索継続",
+            "訪問履歴活用",
+            "優先度判断"
+          ],
+          "status": "success",
+          "response": "https://enterprise.co.jp/contact",
+          "elapsed_sec": 7.1,
+          "usage": {},
+          "error": null,
+          "score": 5,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "/contact または https://enterprise.co.jp/contact のみを返す・訪問済み情報を活用した合理的選択"
+            },
+            {
+              "score": 3,
+              "label": "/contact（またはフルURL）を返すが説明を加える、または他候補も挙げる"
+            },
+            {
+              "score": 1,
+              "label": "/service/detail や /company/history など探索優先度の低いURLを選ぶ"
+            },
+            {
+              "score": 0,
+              "label": "URLを返さない、または訪問済みURLを再選択する"
+            }
+          ]
+        },
+        {
+          "id": "exploration_judgment_02",
+          "title": "探索打ち切り判断とメタ認知",
+          "difficulty": "★★★★★",
+          "tags": [
+            "打ち切り判断",
+            "メタ認知",
+            "探索戦略"
+          ],
+          "status": "success",
+          "response": "B このサイトにはお問い合わせフォームがない可能性が高いため探索を終了する。",
+          "elapsed_sec": 13.4,
+          "usage": {},
+          "error": null,
+          "score": 3,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "B または C を選択し・ニュース記事にフォームが存在しない根拠など妥当な理由を1行で明示"
+            },
+            {
+              "score": 3,
+              "label": "B または C を選ぶが理由が曖昧・根拠に乏しい、または理由を省略している"
+            },
+            {
+              "score": 1,
+              "label": "B または C を選ぶが理由が矛盾している、またはアルファベット以外の形式で回答"
+            },
+            {
+              "score": 0,
+              "label": "A を選択してニュース記事の探索継続を提案する"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form_analysis",
+      "label": "フォーム解析",
+      "questions": [
+        {
+          "id": "form_analysis_01",
+          "title": "HTMLフォームの用途分類",
+          "difficulty": "★★",
+          "tags": [
+            "フォーム解析",
+            "HTML理解",
+            "用途分類"
+          ],
+          "status": "success",
+          "response": "B",
+          "elapsed_sec": 7.0,
+          "usage": {},
+          "error": null,
+          "score": 5,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "B のみを返す・school/resume/pr フィールドと /recruit/apply を正しく採用フォームと判定"
+            },
+            {
+              "score": 3,
+              "label": "B を返すが説明を付加する"
+            },
+            {
+              "score": 1,
+              "label": "A を選択する（お問い合わせと誤認、フォームの一部を正しく認識している）"
+            },
+            {
+              "score": 0,
+              "label": "C または D を選択する、またはアルファベット以外の形式で回答"
+            }
+          ]
+        },
+        {
+          "id": "form_analysis_02",
+          "title": "複数フォームからお問い合わせを特定",
+          "difficulty": "★★★",
+          "tags": [
+            "複数フォーム",
+            "優先判断",
+            "HTML解析"
+          ],
+          "status": "success",
+          "response": "3",
+          "elapsed_sec": 3.9,
+          "usage": {},
+          "error": null,
+          "score": 5,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "3 のみを返す・/contact/send と message フィールドを正しく判定"
+            },
+            {
+              "score": 3,
+              "label": "3 を返すが説明・番号以外の出力を付加する"
+            },
+            {
+              "score": 1,
+              "label": "1 を選択する（メルマガ登録をお問い合わせと誤認）"
+            },
+            {
+              "score": 0,
+              "label": "2 を選択する、または数字以外の形式で回答"
+            }
+          ]
+        },
+        {
+          "id": "form_analysis_03",
+          "title": "曖昧なリード獲得フォームのスコアリング",
+          "difficulty": "★★★★",
+          "tags": [
+            "曖昧性判断",
+            "スコアリング",
+            "フォーム解析"
+          ],
+          "status": "success",
+          "response": "28",
+          "elapsed_sec": 7.0,
+          "usage": {},
+          "error": null,
+          "score": 3,
+          "scoring_criteria": [
+            {
+              "score": 5,
+              "label": "30〜60 の値を返す・/api/v1/lead・work_email・job_title・Request a Demo からリード獲得用と適切に低評価"
+            },
+            {
+              "score": 3,
+              "label": "25〜70 の値を返す（概ね正しいが過大または過小評価）"
+            },
+            {
+              "score": 1,
+              "label": "70〜85 の値を返す（一般問い合わせとほぼ同等と過大評価・リード獲得の特徴を見落とす）"
+            },
+            {
+              "score": 0,
+              "label": "85 以上または 20 未満の値を返す、あるいは数値以外の形式で回答"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -18,9 +18,14 @@ BENCHMARKS_DIR.mkdir(exist_ok=True)
 RESULTS_DIR = Path("results")
 SCORED_DIR = RESULTS_DIR / "scored"
 UNSCORED_DIR = RESULTS_DIR / "unscored"
+REPORTS_DIR = RESULTS_DIR / "reports"
+RUNS_REPORTS_DIR = REPORTS_DIR / "runs"
+COMPARE_REPORTS_DIR = REPORTS_DIR / "compare"
 RESULTS_DIR.mkdir(exist_ok=True)
 SCORED_DIR.mkdir(exist_ok=True)
 UNSCORED_DIR.mkdir(exist_ok=True)
+RUNS_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+COMPARE_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 PRESETS_DIR = Path("presets")
 PRESETS_DIR.mkdir(exist_ok=True)
 LM_STUDIO_BASE = "http://localhost:1234"
@@ -45,10 +50,6 @@ def _maybe_promote(path: Path, data: dict) -> Path:
     if path.parent == UNSCORED_DIR and _is_fully_scored(data):
         dest = SCORED_DIR / path.name
         path.rename(dest)
-        # Move HTML too if present
-        html_src = path.with_suffix(".html")
-        if html_src.exists():
-            html_src.rename(SCORED_DIR / html_src.name)
         return dest
     return path
 
@@ -141,7 +142,7 @@ async def delete_result(filename: str):
         raise HTTPException(404, "Not found")
     path.unlink()
     # Remove HTML too if present
-    html = path.with_suffix(".html")
+    html = RUNS_REPORTS_DIR / (path.stem + ".html")
     if html.exists():
         html.unlink()
     return {"ok": True}
@@ -192,13 +193,38 @@ async def get_report(filename: str):
     if not path:
         raise HTTPException(404, "Not found")
     # 保存済み HTML があればそれを返す
-    html_path = path.with_suffix(".html")
+    html_path = RUNS_REPORTS_DIR / (path.stem + ".html")
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
     # なければ動的生成
     data = load_json(path)
     from report_generator import generate_html
     return HTMLResponse(content=generate_html(data))
+
+
+# ── Compare Reports ────────────────────────────────────────────
+
+@app.get("/api/reports")
+async def list_reports():
+    files = []
+    for f in sorted(COMPARE_REPORTS_DIR.glob("*.md"), reverse=True):
+        files.append({
+            "filename": f.name,
+            "size": f.stat().st_size,
+            "modified": f.stat().st_mtime,
+        })
+    return files
+
+
+@app.get("/api/reports/{filename}")
+async def get_compare_report(filename: str):
+    if ".." in filename:
+        raise HTTPException(400, "Invalid path")
+    path = COMPARE_REPORTS_DIR / filename
+    if not path.exists():
+        raise HTTPException(404, "Not found")
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(content=path.read_text(encoding="utf-8"))
 
 
 # ── Presets ────────────────────────────────────────────────────
@@ -472,7 +498,7 @@ async def run_benchmark(config: RunConfig):
             report_file = None
             try:
                 from report_generator import generate_html
-                html_path = out_path.with_suffix(".html")
+                html_path = RUNS_REPORTS_DIR / (out_path.stem + ".html")
                 with open(html_path, "w", encoding="utf-8") as f:
                     f.write(generate_html(load_json(out_path)))
                 report_file = html_path.name
