@@ -204,15 +204,27 @@ async def get_report(filename: str):
 
 # ── Compare Reports ────────────────────────────────────────────
 
+_ROOT_DOCS = ["README.md", "TUTORIAL.md"]
+
 @app.get("/api/reports")
 async def list_reports():
     files = []
     for f in sorted(COMPARE_REPORTS_DIR.glob("*.md"), reverse=True):
         files.append({
             "filename": f.name,
+            "type": "compare",
             "size": f.stat().st_size,
             "modified": f.stat().st_mtime,
         })
+    for name in _ROOT_DOCS:
+        p = Path(name)
+        if p.exists():
+            files.append({
+                "filename": name,
+                "type": "doc",
+                "size": p.stat().st_size,
+                "modified": p.stat().st_mtime,
+            })
     return files
 
 
@@ -222,7 +234,10 @@ async def get_compare_report(filename: str):
         raise HTTPException(400, "Invalid path")
     path = COMPARE_REPORTS_DIR / filename
     if not path.exists():
-        raise HTTPException(404, "Not found")
+        if filename in _ROOT_DOCS:
+            path = Path(filename)
+        if not path.exists():
+            raise HTTPException(404, "Not found")
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse(content=path.read_text(encoding="utf-8"))
 

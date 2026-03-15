@@ -301,6 +301,9 @@ button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
 .report-item.selected { background: var(--surface2); border-color: var(--accent); }
 .report-item-name { font-weight: 600; font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .report-item-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.report-item.doc-item .report-item-name { color: var(--text); }
+.reports-section-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 8px 4px 4px; margin-top: 4px; }
+.reports-section-title:first-child { margin-top: 0; }
 .reports-main { flex: 1; overflow-y: auto; }
 .reports-empty { padding: 20px; color: var(--muted); font-size: 12px; }
 
@@ -509,7 +512,7 @@ button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
       <div class="reports-layout">
         <div class="reports-sidebar">
           <div class="reports-sidebar-header">
-            <span class="reports-sidebar-title">Compare Reports</span>
+            <span class="reports-sidebar-title">Reports</span>
             <button class="btn-icon btn-sm" onclick="loadReports()" title="更新"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49,15a9,9,0,1,1-2.12-9.36L23,10"/></svg></button>
           </div>
           <div class="reports-list" id="reports-list">
@@ -595,29 +598,47 @@ async function loadReports() {
   list.innerHTML = '<div class="reports-empty">読み込み中...</div>';
   try {
     const files = await fetch('/api/reports').then(r => r.json());
-    if (!files.length) {
+    const compare = files.filter(f => f.type === 'compare');
+    const docs    = files.filter(f => f.type === 'doc');
+
+    let html = '';
+    if (docs.length) {
+      html += `<div class="reports-section-title">ドキュメント</div>`;
+      html += docs.map(f => reportItemHtml(f, 'doc-item')).join('');
+    }
+    if (compare.length) {
+      html += `<div class="reports-section-title">比較レポート</div>`;
+      html += compare.map(f => reportItemHtml(f, '')).join('');
+    }
+    if (!html) {
       list.innerHTML = '<div class="reports-empty">レポートがありません。<br>/compare スキルで生成してください。</div>';
       return;
     }
-    list.innerHTML = files.map(f => {
-      const label = parseReportLabel(f.filename);
-      return `<div class="report-item${_selectedReport === f.filename ? ' selected' : ''}" onclick="openReport('${esc(f.filename)}')" title="${esc(f.filename)}">
-        <div class="report-item-name">${esc(label.benchmark)}</div>
-        <div class="report-item-meta">${esc(label.date)}</div>
-      </div>`;
-    }).join('');
-    // 初回は先頭を自動選択
+    list.innerHTML = html;
     if (!_selectedReport && files.length) openReport(files[0].filename);
   } catch(e) {
     list.innerHTML = `<div class="reports-empty">読み込みエラー</div>`;
   }
 }
 
-function parseReportLabel(filename) {
+function reportItemHtml(f, extraClass) {
+  const label = parseReportLabel(f.filename, f.type);
+  const sel = _selectedReport === f.filename ? ' selected' : '';
+  return `<div class="report-item${sel}${extraClass ? ' ' + extraClass : ''}" onclick="openReport('${esc(f.filename)}')" title="${esc(f.filename)}">
+    <div class="report-item-name">${esc(label.name)}</div>
+    ${label.sub ? `<div class="report-item-meta">${esc(label.sub)}</div>` : ''}
+  </div>`;
+}
+
+function parseReportLabel(filename, type) {
+  if (type === 'doc') {
+    const names = { 'README.md': 'README', 'TUTORIAL.md': 'チュートリアル' };
+    return { name: names[filename] || filename, sub: '' };
+  }
   // 例: form_detect_benchmark_compare_20260316.md
   const m = filename.match(/^(.+?)_compare_(\d{4})(\d{2})(\d{2})\.md$/);
-  if (m) return { benchmark: m[1].replace(/_/g, ' '), date: `${m[2]}-${m[3]}-${m[4]}` };
-  return { benchmark: filename.replace(/\.md$/, ''), date: '' };
+  if (m) return { name: m[1].replace(/_/g, ' '), sub: `${m[2]}-${m[3]}-${m[4]}` };
+  return { name: filename.replace(/\.md$/, ''), sub: '' };
 }
 
 async function openReport(filename) {
