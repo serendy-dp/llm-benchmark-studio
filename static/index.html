@@ -329,19 +329,6 @@ button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
 .md-body li { margin-bottom: 4px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
-<script>
-// 見出しに id を付与（内部アンカーリンクを機能させるため）
-marked.use({
-  renderer: {
-    heading({ tokens, depth }) {
-      const text = this.parser.parseInline(tokens);
-      // HTMLタグを除去してテキストのみでIDを生成
-      const id = text.replace(/<[^>]+>/g, '').trim().toLowerCase().replace(/\s+/g, '-');
-      return `<h${depth} id="${id}">${text}</h${depth}>\n`;
-    }
-  }
-});
-</script>
 </head>
 <body>
 
@@ -667,10 +654,20 @@ async function openReport(filename) {
     if (_reportCache[filename]) {
       md = _reportCache[filename];
     } else {
-      md = await fetch(`/api/reports/${encodeURIComponent(filename)}`).then(r => r.text());
+      const res = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      md = await res.text();
       _reportCache[filename] = md;
     }
-    main.innerHTML = `<div class="md-body">${marked.parse(md)}</div>`;
+    // marked.parse 後に見出しへ id を付与（内部アンカー用）
+    const html = marked.parse(md).replace(
+      /<h([1-6])>(.*?)<\/h\1>/g,
+      (_, level, inner) => {
+        const id = inner.replace(/<[^>]+>/g, '').trim().toLowerCase().replace(/\s+/g, '-');
+        return `<h${level} id="${id}">${inner}</h${level}>`;
+      }
+    );
+    main.innerHTML = `<div class="md-body">${html}</div>`;
     // 内部アンカーリンク (#...) をコンテナ内スクロールに変換
     main.querySelector('.md-body').addEventListener('click', e => {
       const a = e.target.closest('a');
@@ -680,9 +677,7 @@ async function openReport(filename) {
       e.preventDefault();
       const id = decodeURIComponent(href.slice(1));
       const target = main.querySelector(`[id="${id.replace(/"/g, '\\"')}"]`);
-      if (target) {
-        main.scrollTo({ top: target.offsetTop - 12, behavior: 'smooth' });
-      }
+      if (target) main.scrollTo({ top: target.offsetTop - 12, behavior: 'smooth' });
     });
   } catch(e) {
     main.innerHTML = `<div class="reports-empty">読み込みエラー: ${esc(String(e))}</div>`;
