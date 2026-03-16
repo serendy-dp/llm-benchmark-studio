@@ -417,8 +417,26 @@ button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
 
           <div class="run-params-body">
             <div class="config-row">
+              <label>Backend</label>
+              <select id="run-backend" onchange="onBackendChange()">
+                <option value="lmstudio">LM Studio</option>
+                <option value="mlxlm">MLX LM</option>
+              </select>
+            </div>
+            <div class="config-row" id="row-model-select">
               <label>Model</label>
               <select id="run-model"><option value="">-- Select model --</option></select>
+            </div>
+            <div class="config-row" id="row-model-mlx" style="display:none;">
+              <label>Model Path</label>
+              <input type="text" id="run-model-mlx" placeholder="mlx-community/Qwen3-8B-4bit" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 8px;font-size:12px;width:100%;">
+            </div>
+            <div class="config-row" id="row-enable-thinking" style="display:none;">
+              <label>Thinking Mode</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
+                <input type="checkbox" id="run-enable-thinking">
+                <span style="font-size:12px;color:var(--muted);">Enable thinking (Qwen3)</span>
+              </label>
             </div>
             <div class="config-row">
               <label>System Prompt</label>
@@ -430,9 +448,9 @@ button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
             </div>
             <div class="params-row">
               <div class="param-item"><label>Top P</label><input type="number" id="run-top-p" placeholder="default" step="0.05" min="0" max="1"></div>
-              <div class="param-item"><label>Top K</label><input type="number" id="run-top-k" placeholder="default" step="1" min="0"></div>
+              <div class="param-item" id="param-top-k"><label>Top K</label><input type="number" id="run-top-k" placeholder="default" step="1" min="0"></div>
             </div>
-            <div class="params-row">
+            <div class="params-row" id="row-lm-penalties">
               <div class="param-item"><label>Freq Penalty</label><input type="number" id="run-freq-penalty" placeholder="0.0" step="0.1" min="-2" max="2"></div>
               <div class="param-item"><label>Pres Penalty</label><input type="number" id="run-pres-penalty" placeholder="0.0" step="0.1" min="-2" max="2"></div>
             </div>
@@ -979,8 +997,11 @@ function toggleRun() {
 }
 
 async function startRun() {
-  const model = document.getElementById('run-model').value;
-  if (!model) { alert('モデルを選択してください'); return; }
+  const backend = document.getElementById('run-backend').value;
+  const model = backend === 'mlxlm'
+    ? document.getElementById('run-model-mlx').value.trim()
+    : document.getElementById('run-model').value;
+  if (!model) { alert(backend === 'mlxlm' ? 'MLX モデルパスを入力してください' : 'モデルを選択してください'); return; }
   if (!S.selectedBenchmark) { alert('ベンチマークを選択してください'); return; }
 
   const qids = [...document.querySelectorAll('.q-check:checked')].map(cb => cb.value);
@@ -992,6 +1013,8 @@ async function startRun() {
   const config = {
     benchmark_file: S.selectedBenchmark,
     model,
+    backend,
+    enable_thinking: document.getElementById('run-enable-thinking').checked,
     system_prompt: document.getElementById('run-system-prompt').value,
     temperature:        parseFloat(document.getElementById('run-temp').value),
     max_tokens:         parseInt(document.getElementById('run-maxtokens').value),
@@ -1283,7 +1306,20 @@ function renderResultsGrid() {
   }).join('');
 }
 
+function onBackendChange() {
+  const isMLX = document.getElementById('run-backend').value === 'mlxlm';
+  document.getElementById('row-model-select').style.display    = isMLX ? 'none' : '';
+  document.getElementById('row-model-mlx').style.display       = isMLX ? ''     : 'none';
+  document.getElementById('row-enable-thinking').style.display = isMLX ? ''     : 'none';
+  document.getElementById('param-top-k').style.display         = isMLX ? 'none' : '';
+  document.getElementById('row-lm-penalties').style.display    = isMLX ? 'none' : '';
+}
+
 function clearParams() {
+  document.getElementById('run-backend').value = 'lmstudio';
+  document.getElementById('run-model-mlx').value = '';
+  document.getElementById('run-enable-thinking').checked = false;
+  onBackendChange();
   document.getElementById('run-temp').value = '';
   document.getElementById('run-maxtokens').value = '';
   document.getElementById('run-top-p').value = '';
@@ -1318,6 +1354,7 @@ async function openResult(filename) {
 
 function renderMetaParams(meta) {
   const PARAM_LABELS = [
+    ['backend',           'Backend'],
     ['preset_name',       'Preset'],
     ['temperature',       'Temp'],
     ['max_tokens',        'Max Tokens'],

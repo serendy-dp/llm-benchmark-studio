@@ -7,6 +7,8 @@ from typing import Optional
 from datetime import datetime
 
 import httpx
+import threading
+import queue as _queue
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
@@ -29,6 +31,7 @@ COMPARE_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 PRESETS_DIR = Path("presets")
 PRESETS_DIR.mkdir(exist_ok=True)
 LM_STUDIO_BASE = "http://localhost:1234"
+_mlx_cache: dict = {}
 
 
 def find_result_path(filename: str) -> Optional[Path]:
@@ -316,6 +319,21 @@ async def list_models():
         return {"models": [], "connected": False, "error": str(e)}
 
 
+# ── MLX LM helpers ─────────────────────────────────────────────
+
+def _mlx_stream_tokens(model, tokenizer, prompt: str, gen_kwargs: dict,
+                        out_q: "_queue.Queue") -> None:
+    """Thread target: streams tokens from mlx_lm.stream_generate into out_q."""
+    try:
+        from mlx_lm import stream_generate
+        for result in stream_generate(model, tokenizer, prompt=prompt, **gen_kwargs):
+            out_q.put(result.text)
+    except Exception as ex:
+        out_q.put(ex)
+    finally:
+        out_q.put(None)
+
+
 # ── Run ────────────────────────────────────────────────────────
 
 class RunConfig(BaseModel):
@@ -337,6 +355,8 @@ class RunConfig(BaseModel):
     question_ids: Optional[list[str]] = None
     output_prefix: Optional[str] = None
     append_to_file: Optional[str] = None  # 既存ファイルに追記/上書き
+    backend: str = "lmstudio"  # "lmstudio" | "mlxlm"
+    enable_thinking: bool = False
 
 
 @app.post("/api/run")
@@ -398,6 +418,7 @@ async def run_benchmark(config: RunConfig):
                         "seed": config.seed,
                         "stop": config.stop,
                         "preset_name": config.preset_name,
+                        "backend": config.backend,
                     },
                     "domains": [],
                 }
@@ -405,14 +426,26 @@ async def run_benchmark(config: RunConfig):
 
             yield f"data: {json.dumps({'type':'start','total':total,'output_file':out_path.name})}\n\n"
 
-            # ウォームアップ: モデルロード時間を計測から除外するため空リクエストを送る
             yield f"data: {json.dumps({'type':'warmup'})}\n\n"
-            try:
-                warmup_payload = {"model": config.model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1, "stream": False}
-                async with httpx.AsyncClient(timeout=60) as wc:
-                    await wc.post(f"{LM_STUDIO_BASE}/v1/chat/completions", json=warmup_payload)
-            except Exception:
-                pass
+            mlx_model_obj = None
+            mlx_tokenizer_obj = None
+            if config.backend == "mlxlm":
+                try:
+                    from mlx_lm import load as _mlx_load
+                    if config.model not in _mlx_cache:
+                        _mlx_cache[config.model] = await asyncio.to_thread(_mlx_load, config.model)
+                    mlx_model_obj, mlx_tokenizer_obj = _mlx_cache[config.model]
+                except Exception as e:
+                    yield f"data: {json.dumps({'type':'error','message':f'MLX LM load failed: {e}'})}\n\n"
+                    return
+            else:
+                # ウォームアップ: モデルロード時間を計測から除外するため空リクエストを送る
+                try:
+                    warmup_payload = {"model": config.model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1, "stream": False}
+                    async with httpx.AsyncClient(timeout=60) as wc:
+                        await wc.post(f"{LM_STUDIO_BASE}/v1/chat/completions", json=warmup_payload)
+                except Exception:
+                    pass
 
             for idx, (domain, q) in enumerate(questions_to_run, 1):
                 yield f"data: {json.dumps({'type':'question_start','idx':idx,'total':total,'id':q['id'],'title':q['title'],'domain':domain['label'],'difficulty':q['difficulty']})}\n\n"
@@ -421,57 +454,100 @@ async def run_benchmark(config: RunConfig):
                 error_msg = None
                 start_time = time.time()
 
-                payload = {
-                    "model": config.model,
-                    "messages": [
+                if config.backend == "mlxlm":
+                    messages = [
                         {"role": "system", "content": config.system_prompt},
                         {"role": "user", "content": q["prompt"]},
-                    ],
-                    "stream": True,
-                    "temperature": config.temperature,
-                    "max_tokens": config.max_tokens,
-                }
-                if config.top_p is not None:            payload["top_p"] = config.top_p
-                if config.top_k is not None:            payload["top_k"] = config.top_k
-                if config.frequency_penalty is not None: payload["frequency_penalty"] = config.frequency_penalty
-                if config.presence_penalty is not None:  payload["presence_penalty"] = config.presence_penalty
-                if config.repeat_penalty is not None:    payload["repeat_penalty"] = config.repeat_penalty
-                if config.min_p is not None:             payload["min_p"] = config.min_p
-                if config.seed is not None:              payload["seed"] = config.seed
-                if config.stop:                          payload["stop"] = config.stop
+                    ]
+                    try:
+                        try:
+                            prompt_str = mlx_tokenizer_obj.apply_chat_template(
+                                messages, tokenize=False, add_generation_prompt=True,
+                                enable_thinking=config.enable_thinking,
+                            )
+                        except TypeError:
+                            prompt_str = mlx_tokenizer_obj.apply_chat_template(
+                                messages, tokenize=False, add_generation_prompt=True,
+                            )
+                        gen_kwargs: dict = {"max_tokens": config.max_tokens, "temp": config.temperature}
+                        if config.top_p is not None:          gen_kwargs["top_p"] = config.top_p
+                        if config.repeat_penalty is not None: gen_kwargs["repetition_penalty"] = config.repeat_penalty
+                        token_q: _queue.Queue = _queue.Queue()
+                        t = threading.Thread(
+                            target=_mlx_stream_tokens,
+                            args=(mlx_model_obj, mlx_tokenizer_obj, prompt_str, gen_kwargs, token_q),
+                            daemon=True,
+                        )
+                        t.start()
+                        while True:
+                            try:
+                                item = token_q.get_nowait()
+                            except _queue.Empty:
+                                await asyncio.sleep(0.01)
+                                continue
+                            if item is None:
+                                break
+                            if isinstance(item, Exception):
+                                raise item
+                            full_response += item
+                            yield f"data: {json.dumps({'type':'token','idx':idx,'content':item})}\n\n"
+                        t.join()
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        error_msg = str(e)
+                else:
+                    payload = {
+                        "model": config.model,
+                        "messages": [
+                            {"role": "system", "content": config.system_prompt},
+                            {"role": "user", "content": q["prompt"]},
+                        ],
+                        "stream": True,
+                        "temperature": config.temperature,
+                        "max_tokens": config.max_tokens,
+                    }
+                    if config.top_p is not None:            payload["top_p"] = config.top_p
+                    if config.top_k is not None:            payload["top_k"] = config.top_k
+                    if config.frequency_penalty is not None: payload["frequency_penalty"] = config.frequency_penalty
+                    if config.presence_penalty is not None:  payload["presence_penalty"] = config.presence_penalty
+                    if config.repeat_penalty is not None:    payload["repeat_penalty"] = config.repeat_penalty
+                    if config.min_p is not None:             payload["min_p"] = config.min_p
+                    if config.seed is not None:              payload["seed"] = config.seed
+                    if config.stop:                          payload["stop"] = config.stop
 
-                try:
-                    async with httpx.AsyncClient(timeout=600.0) as client:
-                        async with client.stream(
-                            "POST",
-                            f"{LM_STUDIO_BASE}/v1/chat/completions",
-                            json=payload,
-                        ) as resp:
-                            if resp.status_code != 200:
-                                error_msg = f"HTTP {resp.status_code}"
-                            else:
-                                async for line in resp.aiter_lines():
-                                    if not line.startswith("data:"):
-                                        continue
-                                    raw = line[5:].strip()
-                                    if raw == "[DONE]":
-                                        break
-                                    try:
-                                        chunk = json.loads(raw)
-                                        content = (
-                                            chunk.get("choices", [{}])[0]
-                                            .get("delta", {})
-                                            .get("content", "")
-                                        )
-                                        if content:
-                                            full_response += content
-                                            yield f"data: {json.dumps({'type':'token','idx':idx,'content':content})}\n\n"
-                                    except Exception:
-                                        pass
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    error_msg = str(e)
+                    try:
+                        async with httpx.AsyncClient(timeout=600.0) as client:
+                            async with client.stream(
+                                "POST",
+                                f"{LM_STUDIO_BASE}/v1/chat/completions",
+                                json=payload,
+                            ) as resp:
+                                if resp.status_code != 200:
+                                    error_msg = f"HTTP {resp.status_code}"
+                                else:
+                                    async for line in resp.aiter_lines():
+                                        if not line.startswith("data:"):
+                                            continue
+                                        raw = line[5:].strip()
+                                        if raw == "[DONE]":
+                                            break
+                                        try:
+                                            chunk = json.loads(raw)
+                                            content = (
+                                                chunk.get("choices", [{}])[0]
+                                                .get("delta", {})
+                                                .get("content", "")
+                                            )
+                                            if content:
+                                                full_response += content
+                                                yield f"data: {json.dumps({'type':'token','idx':idx,'content':content})}\n\n"
+                                        except Exception:
+                                            pass
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        error_msg = str(e)
 
                 elapsed = round(time.time() - start_time, 1)
                 for marker in ["<|im_end|>", "<|endoftext|>", "</s>"]:
