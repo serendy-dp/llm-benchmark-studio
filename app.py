@@ -262,6 +262,8 @@ class PresetData(BaseModel):
     min_p: Optional[float] = None
     seed: Optional[int] = None
     stop: Optional[str] = None  # comma-separated
+    backend: str = "lmstudio"
+    mlx_extra: Optional[dict] = None  # MLX LM 専用任意パラメータ
 
 
 @app.get("/api/presets")
@@ -356,7 +358,8 @@ class RunConfig(BaseModel):
     output_prefix: Optional[str] = None
     append_to_file: Optional[str] = None  # 既存ファイルに追記/上書き
     backend: str = "lmstudio"  # "lmstudio" | "mlxlm"
-    enable_thinking: bool = False
+    mlx_extra: Optional[dict] = None  # MLX LM 専用任意パラメータ
+    retry_count: int = 0  # エラー・空レスポンス時のリトライ回数
 
 
 @app.post("/api/run")
@@ -453,101 +456,135 @@ async def run_benchmark(config: RunConfig):
                 full_response = ""
                 error_msg = None
                 start_time = time.time()
+                max_attempts = max(1, config.retry_count + 1)
 
-                if config.backend == "mlxlm":
-                    messages = [
-                        {"role": "system", "content": config.system_prompt},
-                        {"role": "user", "content": q["prompt"]},
-                    ]
-                    try:
-                        try:
-                            prompt_str = mlx_tokenizer_obj.apply_chat_template(
-                                messages, tokenize=False, add_generation_prompt=True,
-                                enable_thinking=config.enable_thinking,
-                            )
-                        except TypeError:
-                            prompt_str = mlx_tokenizer_obj.apply_chat_template(
-                                messages, tokenize=False, add_generation_prompt=True,
-                            )
-                        gen_kwargs: dict = {"max_tokens": config.max_tokens, "temp": config.temperature}
-                        if config.top_p is not None:          gen_kwargs["top_p"] = config.top_p
-                        if config.repeat_penalty is not None: gen_kwargs["repetition_penalty"] = config.repeat_penalty
-                        token_q: _queue.Queue = _queue.Queue()
-                        t = threading.Thread(
-                            target=_mlx_stream_tokens,
-                            args=(mlx_model_obj, mlx_tokenizer_obj, prompt_str, gen_kwargs, token_q),
-                            daemon=True,
-                        )
-                        t.start()
-                        while True:
-                            try:
-                                item = token_q.get_nowait()
-                            except _queue.Empty:
-                                await asyncio.sleep(0.01)
-                                continue
-                            if item is None:
-                                break
-                            if isinstance(item, Exception):
-                                raise item
-                            full_response += item
-                            yield f"data: {json.dumps({'type':'token','idx':idx,'content':item})}\n\n"
-                        t.join()
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as e:
-                        error_msg = str(e)
-                else:
-                    payload = {
-                        "model": config.model,
-                        "messages": [
+                for attempt in range(max_attempts):
+                    if attempt > 0:
+                        yield f"data: {json.dumps({'type':'retry','idx':idx,'attempt':attempt,'max':config.retry_count})}\n\n"
+                        full_response = ""
+                        error_msg = None
+                        start_time = time.time()
+
+                    if config.backend == "mlxlm":
+                        messages = [
                             {"role": "system", "content": config.system_prompt},
                             {"role": "user", "content": q["prompt"]},
-                        ],
-                        "stream": True,
-                        "temperature": config.temperature,
-                        "max_tokens": config.max_tokens,
-                    }
-                    if config.top_p is not None:            payload["top_p"] = config.top_p
-                    if config.top_k is not None:            payload["top_k"] = config.top_k
-                    if config.frequency_penalty is not None: payload["frequency_penalty"] = config.frequency_penalty
-                    if config.presence_penalty is not None:  payload["presence_penalty"] = config.presence_penalty
-                    if config.repeat_penalty is not None:    payload["repeat_penalty"] = config.repeat_penalty
-                    if config.min_p is not None:             payload["min_p"] = config.min_p
-                    if config.seed is not None:              payload["seed"] = config.seed
-                    if config.stop:                          payload["stop"] = config.stop
+                        ]
+                        try:
+                            # mlx_extra の各値を Python 型に変換して apply_chat_template に渡す
+                            def _cast(v: str):
+                                if v.lower() in ("true", "yes"):   return True
+                                if v.lower() in ("false", "no"):   return False
+                                try:    return int(v)
+                                except ValueError: pass
+                                try:    return float(v)
+                                except ValueError: pass
+                                return v
+                            template_kwargs = {k: _cast(str(v)) for k, v in (config.mlx_extra or {}).items()}
+                            try:
+                                prompt_str = mlx_tokenizer_obj.apply_chat_template(
+                                    messages, tokenize=False, add_generation_prompt=True,
+                                    **template_kwargs,
+                                )
+                            except TypeError:
+                                prompt_str = mlx_tokenizer_obj.apply_chat_template(
+                                    messages, tokenize=False, add_generation_prompt=True,
+                                )
+                            from mlx_lm.sample_utils import make_sampler, make_logits_processors
+                            sampler = make_sampler(
+                                temp=config.temperature,
+                                top_p=config.top_p if config.top_p is not None else 0.0,
+                                min_p=config.min_p if config.min_p is not None else 0.0,
+                                top_k=config.top_k if config.top_k is not None else 0,
+                            )
+                            logits_procs = make_logits_processors(
+                                repetition_penalty=config.repeat_penalty,
+                            )
+                            gen_kwargs: dict = {
+                                "max_tokens": config.max_tokens,
+                                "sampler": sampler,
+                                "logits_processors": logits_procs if logits_procs else None,
+                            }
+                            token_q: _queue.Queue = _queue.Queue()
+                            t = threading.Thread(
+                                target=_mlx_stream_tokens,
+                                args=(mlx_model_obj, mlx_tokenizer_obj, prompt_str, gen_kwargs, token_q),
+                                daemon=True,
+                            )
+                            t.start()
+                            while True:
+                                try:
+                                    item = token_q.get_nowait()
+                                except _queue.Empty:
+                                    await asyncio.sleep(0.01)
+                                    continue
+                                if item is None:
+                                    break
+                                if isinstance(item, Exception):
+                                    raise item
+                                full_response += item
+                                yield f"data: {json.dumps({'type':'token','idx':idx,'content':item})}\n\n"
+                            t.join()
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as e:
+                            error_msg = str(e)
+                    else:
+                        payload = {
+                            "model": config.model,
+                            "messages": [
+                                {"role": "system", "content": config.system_prompt},
+                                {"role": "user", "content": q["prompt"]},
+                            ],
+                            "stream": True,
+                            "temperature": config.temperature,
+                            "max_tokens": config.max_tokens,
+                        }
+                        if config.top_p is not None:            payload["top_p"] = config.top_p
+                        if config.top_k is not None:            payload["top_k"] = config.top_k
+                        if config.frequency_penalty is not None: payload["frequency_penalty"] = config.frequency_penalty
+                        if config.presence_penalty is not None:  payload["presence_penalty"] = config.presence_penalty
+                        if config.repeat_penalty is not None:    payload["repeat_penalty"] = config.repeat_penalty
+                        if config.min_p is not None:             payload["min_p"] = config.min_p
+                        if config.seed is not None:              payload["seed"] = config.seed
+                        if config.stop:                          payload["stop"] = config.stop
 
-                    try:
-                        async with httpx.AsyncClient(timeout=600.0) as client:
-                            async with client.stream(
-                                "POST",
-                                f"{LM_STUDIO_BASE}/v1/chat/completions",
-                                json=payload,
-                            ) as resp:
-                                if resp.status_code != 200:
-                                    error_msg = f"HTTP {resp.status_code}"
-                                else:
-                                    async for line in resp.aiter_lines():
-                                        if not line.startswith("data:"):
-                                            continue
-                                        raw = line[5:].strip()
-                                        if raw == "[DONE]":
-                                            break
-                                        try:
-                                            chunk = json.loads(raw)
-                                            content = (
-                                                chunk.get("choices", [{}])[0]
-                                                .get("delta", {})
-                                                .get("content", "")
-                                            )
-                                            if content:
-                                                full_response += content
-                                                yield f"data: {json.dumps({'type':'token','idx':idx,'content':content})}\n\n"
-                                        except Exception:
-                                            pass
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as e:
-                        error_msg = str(e)
+                        try:
+                            async with httpx.AsyncClient(timeout=600.0) as client:
+                                async with client.stream(
+                                    "POST",
+                                    f"{LM_STUDIO_BASE}/v1/chat/completions",
+                                    json=payload,
+                                ) as resp:
+                                    if resp.status_code != 200:
+                                        error_msg = f"HTTP {resp.status_code}"
+                                    else:
+                                        async for line in resp.aiter_lines():
+                                            if not line.startswith("data:"):
+                                                continue
+                                            raw = line[5:].strip()
+                                            if raw == "[DONE]":
+                                                break
+                                            try:
+                                                chunk = json.loads(raw)
+                                                content = (
+                                                    chunk.get("choices", [{}])[0]
+                                                    .get("delta", {})
+                                                    .get("content", "")
+                                                )
+                                                if content:
+                                                    full_response += content
+                                                    yield f"data: {json.dumps({'type':'token','idx':idx,'content':content})}\n\n"
+                                            except Exception:
+                                                pass
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as e:
+                            error_msg = str(e)
+
+                    # 成功（レスポンスあり）ならリトライ不要
+                    if not error_msg and full_response:
+                        break
 
                 elapsed = round(time.time() - start_time, 1)
                 for marker in ["<|im_end|>", "<|endoftext|>", "</s>"]:

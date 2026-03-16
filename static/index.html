@@ -429,14 +429,15 @@ button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
             </div>
             <div class="config-row" id="row-model-mlx" style="display:none;">
               <label>Model Path</label>
-              <input type="text" id="run-model-mlx" placeholder="mlx-community/Qwen3-8B-4bit" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 8px;font-size:12px;width:100%;">
+              <div style="display:flex;gap:4px;align-items:center;">
+                <input type="text" id="run-model-mlx" placeholder="組織名/モデル名 (例: mlx-community/...)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 8px;font-size:12px;flex:1;min-width:0;">
+                <a href="https://huggingface.co/models?library=mlx" target="_blank" rel="noopener" title="Hugging Face でMLXモデルを検索" style="display:flex;align-items:center;gap:4px;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;white-space:nowrap;text-decoration:none;flex-shrink:0;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> HF</a>
+              </div>
             </div>
-            <div class="config-row" id="row-enable-thinking" style="display:none;">
-              <label>Thinking Mode</label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
-                <input type="checkbox" id="run-enable-thinking">
-                <span style="font-size:12px;color:var(--muted);">Enable thinking (Qwen3)</span>
-              </label>
+            <div class="config-row" id="row-mlx-extra" style="display:none;flex-direction:column;align-items:stretch;gap:6px;">
+              <label style="margin-bottom:0;">Extra Params</label>
+              <div id="mlx-extra-rows" style="display:flex;flex-direction:column;gap:4px;"></div>
+              <button class="btn-ghost btn-sm" style="width:100%;justify-content:center;" onclick="addMlxExtraRow()">+ Add</button>
             </div>
             <div class="config-row">
               <label>System Prompt</label>
@@ -459,12 +460,22 @@ button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
               <div class="param-item"><label>Min P</label><input type="number" id="run-min-p" placeholder="0.0" step="0.01" min="0" max="1"></div>
             </div>
             <div class="params-row">
-              <div class="param-item"><label>Seed</label><input type="number" id="run-seed" placeholder="-1 (random)" step="1"></div>
-              <div class="param-item"><label>Interval (s)</label><input type="number" id="run-interval" value="3" step="1" min="0"></div>
+              <div class="param-item" id="param-seed"><label>Seed</label><input type="number" id="run-seed" placeholder="-1 (random)" step="1"></div>
             </div>
-            <div class="config-row" style="margin-top:4px;">
+            <div class="config-row" id="row-stop" style="margin-top:4px;">
               <label>Stop Sequences</label>
               <input type="text" id="run-stop" placeholder="token1, token2, ..." style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 8px;font-size:12px;width:100%;">
+            </div>
+            <div id="row-lm-note" style="margin-top:6px;padding:6px 8px;background:var(--surface2);border-radius:5px;border:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.5;">
+              Top-K・Freq/Pres Penalty・Seed・Stop はモデルや設定によって動作しない場合があります
+            </div>
+          </div>
+
+          <div style="padding:6px 14px 2px;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;background:var(--surface2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);flex-shrink:0;">実行設定</div>
+          <div class="run-params-body">
+            <div class="params-row">
+              <div class="param-item"><label>Interval (s)</label><input type="number" id="run-interval" value="3" step="1" min="0" title="問題間の待機時間（秒）"></div>
+              <div class="param-item"><label>Retry</label><input type="number" id="run-retry" value="0" step="1" min="0" max="5" title="エラー・空レスポンス時のリトライ回数"></div>
             </div>
           </div>
         </div>
@@ -723,12 +734,24 @@ function applyPreset() {
   if (!filename) return;
   const p = S.presets.find(x => x.filename === filename);
   if (!p) return;
-  const _set = (id, val) => { if (val !== undefined && val !== null) document.getElementById(id).value = val; else document.getElementById(id).value = ''; };
-  if (p.model) document.getElementById('run-model').value = p.model;
-  if (p.system_prompt !== undefined) document.getElementById('run-system-prompt').value = p.system_prompt;
+  // null/undefined → '' でクリア、数値0も正しくセット
+  const _set = (id, val, def = '') => {
+    document.getElementById(id).value = (val !== undefined && val !== null) ? val : def;
+  };
+  // backend は常に上書き（未設定なら lmstudio をデフォルト）
+  document.getElementById('run-backend').value = p.backend || 'lmstudio';
+  onBackendChange();
+  if ((p.backend || 'lmstudio') === 'mlxlm') {
+    document.getElementById('run-model-mlx').value = p.model || '';
+    setMlxExtra(p.mlx_extra || null);
+  } else {
+    document.getElementById('run-model').value = p.model || '';
+  }
+  document.getElementById('run-system-prompt').value = p.system_prompt ?? '';
   _set('run-temp',           p.temperature);
   _set('run-maxtokens',      p.max_tokens);
   _set('run-interval',       p.interval);
+  _set('run-retry',          p.retry_count, 0);  // 未設定なら 0
   _set('run-top-p',          p.top_p);
   _set('run-top-k',          p.top_k);
   _set('run-freq-penalty',   p.frequency_penalty);
@@ -744,13 +767,19 @@ async function savePreset() {
   if (!name) { alert('プリセット名を入力してください'); return; }
   const _pFloat = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
   const _pInt   = id => { const v = document.getElementById(id).value; return v === '' ? null : parseInt(v); };
+  const backend = document.getElementById('run-backend').value;
+  const model = backend === 'mlxlm'
+    ? document.getElementById('run-model-mlx').value.trim()
+    : document.getElementById('run-model').value;
   const body = {
     name,
-    model:              document.getElementById('run-model').value,
+    backend,
+    model,
     system_prompt:      document.getElementById('run-system-prompt').value,
     temperature:        parseFloat(document.getElementById('run-temp').value),
     max_tokens:         parseInt(document.getElementById('run-maxtokens').value),
     interval:           parseFloat(document.getElementById('run-interval').value),
+    retry_count:        parseInt(document.getElementById('run-retry').value) || 0,
     top_p:              _pFloat('run-top-p'),
     top_k:              _pInt('run-top-k'),
     frequency_penalty:  _pFloat('run-freq-penalty'),
@@ -759,6 +788,7 @@ async function savePreset() {
     min_p:              _pFloat('run-min-p'),
     seed:               _pInt('run-seed'),
     stop:               document.getElementById('run-stop').value.trim() || null,
+    mlx_extra:          backend === 'mlxlm' ? getMlxExtra() : null,
   };
   await fetch('/api/preset', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
   document.getElementById('preset-name').value = '';
@@ -1014,11 +1044,12 @@ async function startRun() {
     benchmark_file: S.selectedBenchmark,
     model,
     backend,
-    enable_thinking: document.getElementById('run-enable-thinking').checked,
+    mlx_extra: backend === 'mlxlm' ? getMlxExtra() : null,
     system_prompt: document.getElementById('run-system-prompt').value,
     temperature:        parseFloat(document.getElementById('run-temp').value),
     max_tokens:         parseInt(document.getElementById('run-maxtokens').value),
     interval:           parseFloat(document.getElementById('run-interval').value),
+    retry_count:        parseInt(document.getElementById('run-retry').value) || 0,
     top_p:              _optFloat('run-top-p'),
     top_k:              _optInt('run-top-k'),
     frequency_penalty:  _optFloat('run-freq-penalty'),
@@ -1306,19 +1337,49 @@ function renderResultsGrid() {
   }).join('');
 }
 
+function addMlxExtraRow(key = '', val = '') {
+  const wrap = document.getElementById('mlx-extra-rows');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:4px;align-items:center;';
+  row.innerHTML =
+    `<input type="text" placeholder="key" value="${esc(key)}" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 6px;font-size:12px;">` +
+    `<input type="text" placeholder="value" value="${esc(val)}" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 6px;font-size:12px;">` +
+    `<button class="btn-ghost btn-sm" style="padding:2px 6px;flex-shrink:0;" onclick="this.parentElement.remove()">×</button>`;
+  wrap.appendChild(row);
+}
+
+function getMlxExtra() {
+  const result = {};
+  document.querySelectorAll('#mlx-extra-rows > div').forEach(row => {
+    const [kEl, vEl] = row.querySelectorAll('input');
+    const k = kEl.value.trim();
+    if (k) result[k] = vEl.value.trim();
+  });
+  return Object.keys(result).length ? result : null;
+}
+
+function setMlxExtra(obj) {
+  document.getElementById('mlx-extra-rows').innerHTML = '';
+  if (obj) Object.entries(obj).forEach(([k, v]) => addMlxExtraRow(k, v));
+}
+
 function onBackendChange() {
   const isMLX = document.getElementById('run-backend').value === 'mlxlm';
-  document.getElementById('row-model-select').style.display    = isMLX ? 'none' : '';
-  document.getElementById('row-model-mlx').style.display       = isMLX ? ''     : 'none';
-  document.getElementById('row-enable-thinking').style.display = isMLX ? ''     : 'none';
-  document.getElementById('param-top-k').style.display         = isMLX ? 'none' : '';
-  document.getElementById('row-lm-penalties').style.display    = isMLX ? 'none' : '';
+  document.getElementById('row-model-select').style.display  = isMLX ? 'none' : '';
+  document.getElementById('row-model-mlx').style.display     = isMLX ? ''     : 'none';
+  document.getElementById('row-mlx-extra').style.display     = isMLX ? 'flex' : 'none';
+  // MLX LM: Top-K ✓ supported, Freq/Pres penalty ✗, Seed ✗, Stop ✗
+  document.getElementById('param-top-k').style.display       = '';  // 両バックエンドで表示
+  document.getElementById('row-lm-penalties').style.display  = isMLX ? 'none' : '';
+  document.getElementById('param-seed').style.display        = isMLX ? 'none' : '';
+  document.getElementById('row-stop').style.display          = isMLX ? 'none' : '';
+  document.getElementById('row-lm-note').style.display       = isMLX ? 'none' : '';
 }
 
 function clearParams() {
   document.getElementById('run-backend').value = 'lmstudio';
   document.getElementById('run-model-mlx').value = '';
-  document.getElementById('run-enable-thinking').checked = false;
+  setMlxExtra(null);
   onBackendChange();
   document.getElementById('run-temp').value = '';
   document.getElementById('run-maxtokens').value = '';
@@ -1330,6 +1391,7 @@ function clearParams() {
   document.getElementById('run-min-p').value = '';
   document.getElementById('run-seed').value = '';
   document.getElementById('run-interval').value = '';
+  document.getElementById('run-retry').value = '';
   document.getElementById('run-stop').value = '';
   document.getElementById('run-system-prompt').value = '';
   document.getElementById('run-model').value = '';
