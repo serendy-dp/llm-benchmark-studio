@@ -1,7 +1,7 @@
 # LLM Benchmark Studio
 
 LLMエージェント能力を評価するためのベンチマークツール。
-FastAPI バックエンド + バニラJS SPA フロントエンド。LM Studio と連携してローカルモデルを評価する。
+FastAPI バックエンド + バニラJS SPA フロントエンド。LM Studio および MLX LM と連携してローカルモデルを評価する。
 
 ## 構成
 
@@ -36,7 +36,7 @@ uvicorn app:app --port 8001 --reload
 
 ```json
 {
-  "meta": { "model": "...", "benchmark_title": "...", "run_at": "..." },
+  "meta": { "model": "...", "benchmark_title": "...", "run_at": "...", "backend": "lmstudio" },
   "domains": [
     {
       "id": "domain_id",
@@ -71,3 +71,21 @@ uvicorn app:app --port 8001 --reload
 | `/score` | 「採点して」 | `results/unscored/` の未採点結果を一括採点し `scored/` へ移動 | [`.claude/commands/score.md`](.claude/commands/score.md) |
 | `/build-benchmark [ファイル名]` | 「ベンチマークを作成して」 | `benchmarks/draft/` のドラフトファイルを読み、スキーマ準拠の JSON を生成 | [`.claude/commands/build-benchmark.md`](.claude/commands/build-benchmark.md) |
 | `/compare [ベンチマークファイル名]` | 「比較して」「モデルを比較」 | 指定ベンチマークの全採点済み結果を横断し、スコア・速度・特性を総合評価してモデル比較レポートを生成 | [`.claude/commands/compare.md`](.claude/commands/compare.md) |
+
+## バックエンド
+
+| バックエンド | 設定キー | モデル指定方法 |
+|------------|---------|--------------|
+| LM Studio | `"lmstudio"` | LM Studio にロード済みのモデルIDをドロップダウンで選択 |
+| MLX LM | `"mlxlm"` | HuggingFace 形式のモデルパス（例: `mlx-community/Qwen3-8B-4bit`）を直接入力 |
+
+MLX LM の場合、モデルは初回実行時にロードされキャッシュされる。
+Extra Params（`mlx_extra`）は key-value で `apply_chat_template` の kwargs に展開される。
+
+## RunConfig 主要フィールド（追加分）
+
+| フィールド | 型 | 説明 |
+|-----------|---|------|
+| `backend` | `str` | `"lmstudio"` または `"mlxlm"` |
+| `mlx_extra` | `dict \| None` | MLX LM 専用の apply_chat_template 追加引数 |
+| `retry_count` | `int` | エラー・空レスポンス時のリトライ回数（デフォルト 0） |
