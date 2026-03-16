@@ -53,7 +53,7 @@ body { background: var(--bg); color: var(--text); font-family: -apple-system, "S
 /* Config */
 .run-layout { display: flex; flex: 1; overflow: hidden; gap: 0; }
 .run-params { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
-.run-params-header { padding: 8px 14px; font-weight: 700; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; background: var(--surface2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.run-params-header { padding: 8px 14px; font-weight: 700; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; background: var(--surface2); border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: center; }
 .run-params-body { padding: 12px 14px; }
 .run-tasks { width: 370px; flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); }
 .run-tasks-header { padding: 8px 14px; font-weight: 700; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; background: var(--surface2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -397,7 +397,7 @@ button svg, .icon-svg { vertical-align: middle; pointer-events: none; }
 
         <!-- Panel 2: Model parameters -->
         <div class="run-params">
-          <div class="run-params-header">Model Parameters</div>
+          <div class="run-params-header">Model Parameters <button class="btn-ghost btn-sm" style="margin-left:auto;" onclick="clearParams()">Clear</button></div>
 
           <!-- Preset -->
           <div class="preset-bar">
@@ -1283,10 +1283,31 @@ function renderResultsGrid() {
   }).join('');
 }
 
+function clearParams() {
+  document.getElementById('run-temp').value = '';
+  document.getElementById('run-maxtokens').value = '';
+  document.getElementById('run-top-p').value = '';
+  document.getElementById('run-top-k').value = '';
+  document.getElementById('run-freq-penalty').value = '';
+  document.getElementById('run-pres-penalty').value = '';
+  document.getElementById('run-repeat-penalty').value = '';
+  document.getElementById('run-min-p').value = '';
+  document.getElementById('run-seed').value = '';
+  document.getElementById('run-interval').value = '';
+  document.getElementById('run-stop').value = '';
+  document.getElementById('run-system-prompt').value = '';
+  document.getElementById('run-model').value = '';
+}
+
 async function openResult(filename) {
   S.activeResult = filename;
   renderSidebarResults();
   renderResultsGrid();
+  // 選択カードまでスクロール
+  requestAnimationFrame(() => {
+    const sel = document.querySelector('#results-grid .result-card.selected');
+    if (sel) sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
   showTab('results');
   try {
     const data = await fetch(`/api/result/${encodeURIComponent(filename)}`).then(r => r.json());
